@@ -466,7 +466,7 @@
         </div>
     </div>
 
-    <section id="generationStatusCard" class="generation-status-card" aria-live="polite" aria-atomic="true">
+    <section id="generationStatusCard" class="generation-status-card is-visible" aria-live="polite" aria-atomic="true">
         <div class="generation-status-heading">
             <div>
                 <div class="generation-status-title">
@@ -620,8 +620,7 @@
             });
             if (!response.ok) throw new Error('Status request failed');
             const state = await response.json();
-            card.classList.toggle('is-visible', state.hasWork || state.stage === 'Failed');
-            if (!state.hasWork) return;
+            card.classList.add('is-visible');
 
             const pct = Math.max(0, Math.min(100, Number(state.pct) || 0));
             document.getElementById('generationStage').textContent = state.stage || 'Processing';
@@ -634,6 +633,7 @@
             const counts = [];
             if (state.total > 0) counts.push(Number(state.done).toLocaleString() + ' of ' + Number(state.total).toLocaleString() + ' records');
             if (state.pendingCount > 0) counts.push(state.pendingCount + ' report' + (state.pendingCount === 1 ? '' : 's') + ' waiting');
+            if (!state.hasWork) counts.push('Queue clear');
             document.getElementById('generationCounts').textContent = counts.join(' · ');
             const activeAgents = Number(state.activeAgents) || 0;
             const configuredAgents = Number(state.configuredAgents) || 1;
