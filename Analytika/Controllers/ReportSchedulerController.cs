@@ -262,6 +262,9 @@ public class ReportSchedulerController : Controller
             dateRange = activeVisible ? snapshot.DateRange : "",
             startedAt = activeVisible ? snapshot.StartedAt : (DateTime?)null,
             pendingCount = queued.Count(report => report.Status == "Pending"),
+            activeAgents = activeVisible && snapshot.IsRunning ? 1 : 0,
+            configuredAgents = 1,
+            agentStatus = activeVisible && snapshot.IsRunning ? "Retrieving report data" : next != null ? "Waiting" : "Idle",
             hasWork = queued.Count > 0
         });
     }

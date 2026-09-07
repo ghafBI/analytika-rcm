@@ -280,6 +280,35 @@ $(document).ready(function() {
             allowClear: true,
             width: '100%'
         });
+
+        // Report Scheduler filters support explicit bulk selection. Keep the
+        // controls beside each Select2 instance so keyboard and touch users do
+        // not have to select a long facility/payer list one item at a time.
+        $('#reportForm .select2-multi').each(function(index) {
+            var $select = $(this);
+            if ($select.data('bulk-actions-ready')) return;
+
+            var selectId = $select.attr('id');
+            if (!selectId) {
+                selectId = 'reportMultiSelect' + (index + 1);
+                $select.attr('id', selectId);
+            }
+
+            var $actions = $('<div class="multi-select-actions" role="group" aria-label="Selection actions"></div>');
+            var $selectAll = $('<button type="button" class="multi-select-action">Select all</button>')
+                .attr('aria-controls', selectId)
+                .on('click', function() {
+                    var values = $select.find('option:not(:disabled)').map(function() { return this.value; }).get();
+                    $select.val(values).trigger('change');
+                });
+            var $clear = $('<button type="button" class="multi-select-action">Clear</button>')
+                .attr('aria-controls', selectId)
+                .on('click', function() { $select.val(null).trigger('change'); });
+
+            $actions.append($selectAll, $clear);
+            $select.next('.select2').after($actions);
+            $select.data('bulk-actions-ready', true);
+        });
     }
 });
 
