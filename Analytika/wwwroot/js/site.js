@@ -278,7 +278,17 @@ $(document).ready(function() {
         $('.select2-multi').not('.select2-hidden-accessible').select2({
             placeholder: '-- All --',
             allowClear: true,
-            width: '100%'
+            width: '100%',
+            closeOnSelect: false,
+            templateResult: function(option) {
+                if (!option.id) return option.text;
+
+                var $row = $('<span class="select2-checkbox-option"></span>');
+                var $checkbox = $('<input type="checkbox" tabindex="-1" aria-hidden="true" />')
+                    .prop('checked', Boolean(option.element && option.element.selected));
+                $row.append($checkbox, $('<span></span>').text(option.text));
+                return $row;
+            }
         });
 
         // Report Scheduler filters support explicit bulk selection. Keep the

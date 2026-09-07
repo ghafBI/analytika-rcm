@@ -432,6 +432,22 @@ html[dir="rtl"] .lang-theme-tools {
   line-height: 1.15;
 }
 
+.select2-checkbox-option {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  width: 100%;
+}
+
+.select2-checkbox-option input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--deep-navy, #011c40);
+  pointer-events: none;
+  flex: 0 0 auto;
+}
+
 /* Nav links */
 .analytika-navbar .nav-link {
   color: var(--text-muted) !important;
