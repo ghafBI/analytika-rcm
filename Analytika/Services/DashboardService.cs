@@ -18,6 +18,7 @@ public class DashboardService : IDashboardService
     private const string CacheKeyRefreshingFlag = "dashboard:facilitystatus:refreshing";
     private static readonly SemaphoreSlim SnapshotLock = new(1, 1);
     private static readonly SemaphoreSlim RcmBuildLock = new(1, 1);
+    private static readonly object RcmTaskLock = new();
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan SoftTtl  = TimeSpan.FromMinutes(2);
 
@@ -333,20 +334,54 @@ public class DashboardService : IDashboardService
         });
         if (_cache.TryGetValue<RCMDashboardViewModel>(key, out var cached) && cached != null)
             return cached;
-        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        budget.CancelAfter(TimeSpan.FromSeconds(60));
-        // Coalesce repeated requests and prevent simultaneous cold scans from
-        // overwhelming SQLite. All authorized scope values are in the cache key.
-        await RcmBuildLock.WaitAsync(budget.Token);
-        try
+        cancellationToken.ThrowIfCancellationRequested();
+        Task<RCMDashboardViewModel> pending;
+        lock (RcmTaskLock)
         {
             if (_cache.TryGetValue<RCMDashboardViewModel>(key, out cached) && cached != null)
                 return cached;
-            var result = await BuildRcmDashboardCoreAsync(tab, filters, budget.Token);
-            _cache.Set(key, result, TimeSpan.FromSeconds(30));
-            return result;
+            var taskKey = key + ":building";
+            if (!_cache.TryGetValue(taskKey, out pending!))
+            {
+                var snapshot = new RcmDashboardFilters
+                {
+                    FacilityIds = filters.FacilityIds.ToList(), Receivers = filters.Receivers.ToList(),
+                    Payers = filters.Payers.ToList(), EncounterTypes = filters.EncounterTypes.ToList(),
+                    DateFrom = filters.DateFrom, DateTo = filters.DateTo
+                };
+                pending = Task.Run(async () =>
+                {
+                    using var budget = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+                    await RcmBuildLock.WaitAsync(budget.Token);
+                    try
+                    {
+                        // The request context may be disposed after the short wait.
+                        // Background queries always own a fresh scope and DbContext.
+                        using var scope = _scopeFactory.CreateScope();
+                        var builder = ActivatorUtilities.CreateInstance<DashboardService>(scope.ServiceProvider);
+                        var result = await builder.BuildRcmDashboardCoreAsync(tab, snapshot, budget.Token);
+                        _cache.Set(key, result, TimeSpan.FromMinutes(5));
+                        return result;
+                    }
+                    finally { RcmBuildLock.Release(); }
+                });
+                _cache.Set(taskKey, pending);
+                _ = pending.ContinueWith(completed =>
+                {
+                    if (completed.IsFaulted)
+                        _logger.LogWarning(completed.Exception, "RCM dashboard background aggregation failed");
+                    lock (RcmTaskLock) { _cache.Remove(taskKey); }
+                }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            }
         }
-        finally { RcmBuildLock.Release(); }
+        try
+        {
+            return await pending.WaitAsync(TimeSpan.FromSeconds(3), cancellationToken);
+        }
+        catch (TimeoutException ex)
+        {
+            throw new OperationCanceledException("RCM figures are preparing in the background; retry shortly.", ex);
+        }
     }
 
     private async Task<RCMDashboardViewModel> BuildRcmDashboardCoreAsync(string tab, RcmDashboardFilters filters, CancellationToken ct)

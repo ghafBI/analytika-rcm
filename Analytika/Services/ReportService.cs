@@ -330,13 +330,17 @@ public class ReportService : IReportService
                 }
                 else
                 {
-                    var matchResult = await _xmlParsingService.MatchParsedRecordsAsync();
-                    parseResult = new XmlParsingRunResult { MatchedClaimRefs = matchResult.MatchedClaimRefs };
-                    UpdateStage("Preparing parsed XML", 20, 0, 0, "Using prepared all-facility XML cache. Prepare or rebuild from Portal > XML Parsing when new files are downloaded.");
+                    // Report queries perform their own source joins. Resetting and
+                    // rebuilding global IsMatched flags here unnecessarily locks the
+                    // entire ledger before every all-facility report.
+                    parseResult = new XmlParsingRunResult();
+                    UpdateStage("Preparing parsed XML", 20, 0, 0, "Using the prepared all-facility XML cache; global matching was not run. Prepare pending files from Portal > XML Parsing when new files are downloaded.");
                 }
             }
             UpdateStage("Preparing parsed XML", 20, parseResult.RecordsSaved, parseResult.FilesScanned,
-                $"XML cache ready: {parseResult.RecordsSaved:N0} new claim row(s), {parseResult.MatchedClaimRefs:N0} matched claim ref(s).");
+                facilityIds.Count > 0
+                    ? $"XML cache ready: {parseResult.RecordsSaved:N0} new claim row(s), {parseResult.MatchedClaimRefs:N0} matched claim ref(s)."
+                    : "Using prepared XML records and report-specific joins. Global matching was not run; pending files must be prepared through Portal > XML Parsing.");
 
             UpdateStage("Loading payer lookup", 18, 0, 0, "Query: DhpoCodingSets where Category = Payer.");
             var payerLookup = await LoadPayerLookupAsync();

@@ -43,11 +43,24 @@ public class DashboardKpiRegressionTests
         }
 
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        using var services = new ServiceCollection().BuildServiceProvider();
+        using var services = new ServiceCollection()
+            .AddSingleton<IMemoryCache>(cache)
+            .AddSingleton<IConfiguration>(new ConfigurationBuilder().Build())
+            .AddLogging()
+            .AddScoped(_ => new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options))
+            .BuildServiceProvider();
         var sut = new DashboardService(db, cache, services.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<DashboardService>.Instance, new ConfigurationBuilder().Build());
-        var result = await sut.BuildRcmDashboardAsync("Submissions",
-            new RcmDashboardFilters { FacilityIds = new() { 1 } });
+        async Task<RCMDashboardViewModel> Load(int facility)
+        {
+            using var limit = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            while (true)
+            {
+                try { return await sut.BuildRcmDashboardAsync("Submissions", new RcmDashboardFilters { FacilityIds = new() { facility } }, limit.Token); }
+                catch (OperationCanceledException) when (!limit.IsCancellationRequested) { await Task.Delay(100, limit.Token); }
+            }
+        }
+        var result = await Load(1);
 
         Assert.Equal(empty ? "0" : "3", result.Metrics.Single(m => m.Label == "Total Claims").Value);
         Assert.Equal(empty ? "—" : "+100.0%", result.Metrics.Single(m => m.Label == "Total Claims").Delta);
@@ -56,8 +69,7 @@ public class DashboardKpiRegressionTests
         var cached = await sut.BuildRcmDashboardAsync("Submissions",
             new RcmDashboardFilters { FacilityIds = new() { 1 } });
         Assert.Same(result, cached);
-        var otherScope = await sut.BuildRcmDashboardAsync("Submissions",
-            new RcmDashboardFilters { FacilityIds = new() { 2 } });
+        var otherScope = await Load(2);
         Assert.NotSame(result, otherScope);
         Assert.Equal(empty ? "0" : "1", otherScope.Metrics.Single(m => m.Label == "Total Claims").Value);
         using var canceled = new CancellationTokenSource();

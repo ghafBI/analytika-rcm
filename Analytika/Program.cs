@@ -78,7 +78,9 @@ if (args.Contains("--repair-report-lookups", StringComparer.OrdinalIgnoreCase))
     }
     using var repairCancellation = new CancellationTokenSource();
     Console.CancelKeyPress += (_, eventArgs) => { eventArgs.Cancel = true; repairCancellation.Cancel(); };
-    Environment.ExitCode = await ReportLookupRepairCommand.RunAsync(dbPath, repairCancellation.Token);
+    Environment.ExitCode = await ReportLookupRepairCommand.RunAsync(dbPath, repairCancellation.Token,
+        builder.Configuration.GetValue("LookupRepair:PageSize", 500),
+        builder.Configuration.GetValue("LookupRepair:DelayMs", 250));
     return;
 }
 
