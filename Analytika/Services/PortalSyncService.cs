@@ -123,6 +123,7 @@ public class PortalSyncService
             // Archive search period must not exceed 1 month per call.
             var chunks = GetDateChunks(from, to, 30);
             int facNew = 0, facFiles = 0;
+            var failures = new List<string>();
 
             foreach (var (start, end) in chunks)
             {
@@ -141,6 +142,7 @@ public class PortalSyncService
                     {
                         _logger.LogWarning("[ArchiveBackfill] Facility {Id} {Period}: {Error}",
                             cred.FacilityId, start.ToString("yyyy-MM"), err);
+                        failures.Add($"{start:yyyy-MM}/{status}: {err}");
                         continue;
                     }
                     rows.AddRange(r);
@@ -150,7 +152,8 @@ public class PortalSyncService
                 if (!uniqueRows.Any()) continue;
 
                 var (n, _, files) = await UpsertDhaTransactionsWithDownloadAsync(
-                    uniqueRows, cred.Username, pwd, cred.FacilityId, operation, start.ToString("yyyy-MM"), "DHA");
+                    uniqueRows, cred.Username, pwd, cred.FacilityId, operation, start.ToString("yyyy-MM"), "DHA",
+                    useArchiveDownload: true);
                 facNew += n; facFiles += files;
             }
 
@@ -163,13 +166,18 @@ public class PortalSyncService
                 Operation = operation,
                 FetchedBy = "system",
                 RecordsFetched = facNew,
-                Status = "Success",
-                ResponseSummary = $"Archive backfill {from:yyyy-MM-dd}..{to:yyyy-MM-dd}: {facNew} new, {facFiles} files"
+                Status = failures.Count == 0 ? "Success" : "Failed",
+                ResponseSummary = failures.Count == 0
+                    ? $"Archive backfill {from:yyyy-MM-dd}..{to:yyyy-MM-dd}: {facNew} new, {facFiles} files"
+                    : $"Archive backfill incomplete: {string.Join(" | ", failures.Take(5))}"
             });
             await _db.SaveChangesAsync();
 
             _logger.LogInformation("[ArchiveBackfill] Facility {Id}: {New} new, {Files} files",
                 cred.FacilityId, facNew, facFiles);
+            if (failures.Count > 0)
+                throw new InvalidOperationException(
+                    $"DHA archive backfill failed for facility {cred.FacilityId}: {string.Join(" | ", failures)}");
         }
 
         return (grandNew, grandFiles);
@@ -202,6 +210,7 @@ public class PortalSyncService
         int facilityId, string operation, string period,
         string portal,
         bool skipDownload = false,
+        bool useArchiveDownload = false,
         Func<int, int, int, IReadOnlyDictionary<string, int>, Task>? onProgress = null)
     {
         if (!rows.Any()) return (0, 0, 0);
@@ -236,7 +245,7 @@ public class PortalSyncService
         // 3. Parallel download new records
         if (newRows.Any())
         {
-            var downloaded = await DownloadParallelAsync(newRows, login, pwd, facilityId, skipDownload, maxConcurrency: GetWorkerCount());
+            var downloaded = await DownloadParallelAsync(newRows, login, pwd, facilityId, skipDownload, maxConcurrency: GetWorkerCount(), useArchiveDownload);
             var now = DateTime.UtcNow;
             int progressBatch = 0;
 
@@ -282,7 +291,7 @@ public class PortalSyncService
         // 4. Retry download for existing records that previously failed
         if (!skipDownload && retryRows.Any())
         {
-            var retried = await DownloadParallelAsync(retryRows, login, pwd, facilityId, false, maxConcurrency: GetWorkerCount());
+            var retried = await DownloadParallelAsync(retryRows, login, pwd, facilityId, false, maxConcurrency: GetWorkerCount(), useArchiveDownload);
             var retryNow = DateTime.UtcNow;
 
             foreach (var (row, contentXml, sizeBytes, dlOk) in retried.Where(r => r.Downloaded))
@@ -309,7 +318,7 @@ public class PortalSyncService
         DownloadParallelAsync(
             List<PortalFetchResultRow> rows,
             string login, string pwd, int facilityId,
-            bool skipDownload, int maxConcurrency)
+            bool skipDownload, int maxConcurrency, bool useArchiveDownload = false)
     {
         var results = new ConcurrentBag<(PortalFetchResultRow, string?, long?, bool)>();
         var sem = new SemaphoreSlim(maxConcurrency);
@@ -326,12 +335,14 @@ public class PortalSyncService
                         // DownloadTransactionFile takes the transaction GUID. (The
                         // six-week download outage from Jun 9 was the SOAP param
                         // casing — DHPO requires <fileId>, we sent <fileID>.)
-                        var (_, dlFileName, dlBytes, dlErr) = await _dha.DownloadTransactionFileAsync(login, pwd, row.FileId);
+                        var (_, dlFileName, dlBytes, dlErr) = useArchiveDownload
+                            ? await _dha.DownloadTransactionFileArchiveAsync(login, pwd, row.FileId)
+                            : await _dha.DownloadTransactionFileAsync(login, pwd, row.FileId);
                         // Historical transactions may only be available through DHPO's
                         // archive service. Preserve the normal endpoint as the fast path,
                         // then retry the same immutable file id against Archive before
                         // marking the source unavailable.
-                        if (dlBytes == null || dlBytes.Length == 0)
+                        if (!useArchiveDownload && (dlBytes == null || dlBytes.Length == 0))
                         {
                             var archive = await _dha.DownloadTransactionFileArchiveAsync(login, pwd, row.FileId);
                             if (archive.fileBytes is { Length: > 0 })

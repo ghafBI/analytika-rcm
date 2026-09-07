@@ -1,5 +1,6 @@
 using Analytika.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Analytika.Services;
 
@@ -26,6 +27,9 @@ public static class ExternalReportWorker
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            if (await ProcessArchiveRequestAsync(services, logger, stoppingToken))
+                continue;
+
             int? reportId;
             using (var scope = services.CreateScope())
             {
@@ -65,5 +69,54 @@ public static class ExternalReportWorker
                 await Task.Delay(TimeSpan.FromSeconds(pollSeconds), stoppingToken);
             }
         }
+    }
+
+    private static async Task<bool> ProcessArchiveRequestAsync(
+        IServiceProvider services, ILogger logger, CancellationToken stoppingToken)
+    {
+        int? requestId;
+        using (var scope = services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            requestId = await db.PortalFetchLogs.AsNoTracking()
+                .Where(x => x.Operation == "ArchiveBackfillRequest" && x.Status == "Queued")
+                .OrderBy(x => x.FetchedAt).Select(x => (int?)x.Id)
+                .FirstOrDefaultAsync(stoppingToken);
+            if (!requestId.HasValue) return false;
+            var claimed = await db.PortalFetchLogs
+                .Where(x => x.Id == requestId && x.Status == "Queued")
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, "Processing"), stoppingToken);
+            if (claimed == 0) return true;
+        }
+
+        try
+        {
+            using var scope = services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var request = await db.PortalFetchLogs.SingleAsync(x => x.Id == requestId, stoppingToken);
+            using var payload = JsonDocument.Parse(request.ResponseSummary ?? "{}");
+            var root = payload.RootElement;
+            var from = root.GetProperty("From").GetDateTime();
+            var to = root.GetProperty("To").GetDateTime();
+            int? facilityId = root.TryGetProperty("FacilityId", out var f) && f.ValueKind == JsonValueKind.Number
+                ? f.GetInt32() : null;
+            var sync = scope.ServiceProvider.GetRequiredService<PortalSyncService>();
+            var (records, files) = await sync.RunDhaArchiveBackfillAsync(from, to, facilityId, "ArchiveBackfillManual");
+            request.Status = "Success";
+            request.RecordsFetched = records;
+            request.ResponseSummary = $"Completed: {records} new records, {files} files downloaded";
+            await db.SaveChangesAsync(stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            using var scope = services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var request = await db.PortalFetchLogs.SingleAsync(x => x.Id == requestId, stoppingToken);
+            request.Status = "Failed";
+            request.ResponseSummary = $"Failed: {ex.Message}";
+            await db.SaveChangesAsync(stoppingToken);
+            logger.LogError(ex, "External worker failed archive request {RequestId}", requestId);
+        }
+        return true;
     }
 }

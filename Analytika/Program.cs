@@ -316,7 +316,7 @@ app.MapHealthChecks("/healthz").AllowAnonymous();
 
 // Public liveness and deployment identity endpoint. Keep this independent of
 // database and portal readiness so supervisors only restart a dead web process.
-app.MapGet("/api/health", (HttpContext context) =>
+app.MapGet("/api/health", async (HttpContext context, AiHealthProbeService aiHealth, CancellationToken cancellationToken) =>
 {
     var assembly = Assembly.GetExecutingAssembly();
     var informationalVersion = assembly
@@ -331,6 +331,9 @@ app.MapGet("/api/health", (HttpContext context) =>
         ?? "unknown";
 
     context.Response.Headers.CacheControl = "no-store";
+    object ai;
+    try { ai = await aiHealth.GetStatusAsync(cancellationToken); }
+    catch { ai = new { state = "unavailable", fallbackReady = false }; }
     return Results.Ok(new
     {
         status = "ok",
@@ -340,7 +343,8 @@ app.MapGet("/api/health", (HttpContext context) =>
         commitSha,
         environment = app.Environment.EnvironmentName,
         startedAtUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime(),
-        timestampUtc = DateTimeOffset.UtcNow
+        timestampUtc = DateTimeOffset.UtcNow,
+        ai
     });
 }).AllowAnonymous();
 

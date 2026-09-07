@@ -182,6 +182,10 @@ public static class ModuleRegistration
         services.AddScoped<ReconciliationService>();
         services.AddScoped<RemittanceParserService>();
         services.AddScoped<XmlParsingService>();
+        services.AddScoped<AiHealthProbeService>();
+        services.AddScoped<IAiSettingsService, AiSettingsService>();
+        services.AddScoped<INvidiaAnalystService, NvidiaAnalystService>();
+        services.AddHttpClient("ai-health");
         services.AddScoped<Analytika.Security.FacilityScopeService>();
         services.AddHttpContextAccessor();
         services.AddScoped<Analytika.Security.ITenantContext, Analytika.Security.TenantContext>();

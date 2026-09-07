@@ -45,8 +45,8 @@ public class PortalController : Controller
     // POST Portal/ArchiveBackfill — on-demand pull of OLD sent claim (submission)
     // files from the DHA archive endpoint over a wide date range (e.g. 2022–2023),
     // so remittances that arrive later have their originating submissions to match.
-    // Enqueued as a background job (a multi-year backfill is long-running); the
-    // worker container's Hangfire server processes it.
+    // Persisted in the shared application database; the external worker claims
+    // it without relying on process-local Hangfire storage.
     [HttpPost]
     [ValidateAntiForgeryToken]
     public IActionResult ArchiveBackfill(DateTime from, DateTime to, int? facilityId)
@@ -58,14 +58,23 @@ public class PortalController : Controller
         }
         if (from > to) (from, to) = (to, from);
 
-        var jobId = Hangfire.BackgroundJob.Enqueue<PortalSyncService>(
-            s => s.RunDhaArchiveBackfillAsync(from, to, facilityId, "ArchiveBackfillManual"));
+        var request = new PortalFetchLog
+        {
+            Portal = "DHA",
+            FacilityId = facilityId ?? 0,
+            Operation = "ArchiveBackfillRequest",
+            Status = "Queued",
+            FetchedBy = User.Identity?.Name ?? "operator",
+            ResponseSummary = JsonSerializer.Serialize(new { From = from, To = to, FacilityId = facilityId })
+        };
+        _db.PortalFetchLogs.Add(request);
+        _db.SaveChanges();
 
-        _logger.LogInformation("[ArchiveBackfill] Queued manual backfill {From:yyyy-MM-dd}→{To:yyyy-MM-dd} facility={Fac} job={Job}",
-            from, to, facilityId?.ToString() ?? "all", jobId);
+        _logger.LogInformation("[ArchiveBackfill] Queued durable request {RequestId} {From:yyyy-MM-dd}→{To:yyyy-MM-dd} facility={Fac}",
+            request.Id, from, to, facilityId?.ToString() ?? "all");
         TempData["Success"] = $"Archive backfill queued for {from:yyyy-MM-dd} → {to:yyyy-MM-dd}"
             + (facilityId is int f ? $" (facility {f})" : " (all facilities)")
-            + $". Job {jobId}. Downloaded submissions appear under Portal → Files.";
+            + $". Request {request.Id}. Downloaded submissions appear under Portal → Files.";
         return RedirectToAction(nameof(Fetch));
     }
 

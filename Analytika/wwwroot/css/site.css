@@ -365,6 +365,23 @@ html[dir="rtl"] .lang-theme-tools {
   flex-shrink: 0;
 }
 
+/* Calm emblem motion; transform/opacity stay on the compositor and do not
+   trigger page reflow. The source image and its original shades are unchanged. */
+.analytika-brand .brand-icon-sm {
+  animation: bix-emblem-breathe 4.5s ease-in-out infinite;
+  transform-origin: 50% 50%;
+  will-change: transform, filter;
+}
+
+@keyframes bix-emblem-breathe {
+  0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 0 rgba(1, 28, 64, 0)); }
+  50% { transform: translateY(-2px) scale(1.045); filter: drop-shadow(0 3px 5px rgba(1, 28, 64, .22)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analytika-brand .brand-icon-sm { animation: none; will-change: auto; }
+}
+
 .brand-name-wrap .brand-text {
   display: block;
   font-size: 1rem;
