@@ -6,6 +6,7 @@ public interface IDashboardService
 {
     Task<FacilityStatusViewModel> BuildFacilityStatusAsync();
     Task<RCMDashboardViewModel> BuildRcmDashboardAsync(string tab, RcmDashboardFilters filters);
+    Task<RCMDashboardViewModel> BuildRcmDashboardAsync(string tab, RcmDashboardFilters filters, CancellationToken cancellationToken);
 
     /// <summary>
     /// Force a full aggregation NOW and populate the cache. For startup pre-warm.

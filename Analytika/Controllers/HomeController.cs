@@ -170,7 +170,16 @@ public class HomeController : Controller
             DateTo = dateTo
         };
 
-        return View(await _dashboard.BuildRcmDashboardAsync(tab, filters));
+        try
+        {
+            return View(await _dashboard.BuildRcmDashboardAsync(tab, filters, HttpContext.RequestAborted));
+        }
+        catch (OperationCanceledException) when (!HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            Response.Headers.RetryAfter = "30";
+            return View("RcmBusy");
+        }
     }
 
     // ── Dashboard summary API (charts) ────────────────────────────

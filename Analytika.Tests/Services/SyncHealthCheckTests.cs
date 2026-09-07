@@ -11,6 +11,24 @@ namespace Analytika.Tests.Services;
 
 public class SyncHealthCheckTests : IDisposable
 {
+    [Fact]
+    public async Task Missing_database_schema_is_degraded_not_healthy()
+    {
+        await _db.Database.ExecuteSqlRawAsync("DROP TABLE PortalCredentials");
+        var result = await new SyncHealthCheck(_db, _config).CheckHealthAsync(new HealthCheckContext());
+        result.Status.Should().Be(HealthStatus.Degraded);
+        result.Description.Should().Contain("unavailable");
+        result.Description.Should().NotContain("SQLite");
+    }
+
+    [Fact]
+    public async Task Readiness_does_not_require_the_claim_ledger()
+    {
+        await _db.Database.ExecuteSqlRawAsync("DROP TABLE XmlParsedRecords");
+        var result = await new SyncHealthCheck(_db, _config).CheckHealthAsync(new HealthCheckContext());
+        result.Status.Should().Be(HealthStatus.Healthy);
+    }
+
     private readonly SqliteConnection _connection;
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;

@@ -32,7 +32,8 @@ public class ReportSchedulerController : Controller
     private async Task<List<int>?> GetUserFacilityIdsAsync()
     {
         var appUser = await _userManager.GetUserAsync(User);
-        if (appUser?.UserType != "Facility") return null;
+        if (appUser == null) return new List<int>();
+        if (appUser.UserType != "Facility") return null;
         return await _context.Set<UserFacility>()
             .Where(x => x.UserId == appUser.Id)
             .Select(x => x.FacilityId)
@@ -128,6 +129,11 @@ public class ReportSchedulerController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateReport(ReportSchedulerViewModel model)
     {
+        if (model.SelectedDepartments.Count > 0)
+        {
+            TempData["Error"] = ReportFilterSupport.DepartmentUnavailable;
+            return RedirectToAction(GetActionName(model.ReportType));
+        }
         if (!ReportDateWindow.TryResolve(
                 model.DateRange,
                 Request.Form["DateFrom"].ToString(),
@@ -194,6 +200,8 @@ public class ReportSchedulerController : Controller
     [HttpGet]
     public async Task<IActionResult> GetReports(string reportType, int page = 1, int pageSize = 10)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var facilityIds = await GetUserFacilityIdsAsync();
         var (reports, total) = await _reportService.GetReportsAsync(reportType, page, pageSize, facilityIds);
         return Json(new
@@ -240,33 +248,11 @@ public class ReportSchedulerController : Controller
 
         var queued = await queueQuery
             .OrderBy(report => report.RequestedAt)
-            .Select(report => new { report.Id, report.ReportId, report.Status })
+            .Select(report => new ReportRequest { Id = report.Id, ReportId = report.ReportId, Status = report.Status,
+                BranchId = report.BranchId, FacilityIdsCsv = report.FacilityIdsCsv })
             .ToListAsync();
-
-        var snapshot = ReportGenerationState.Get();
-        var activeVisible = snapshot.ReportType.Equals(reportType, StringComparison.OrdinalIgnoreCase)
-            && queued.Any(report => report.Id == snapshot.ReportRequestId);
-        var next = queued.FirstOrDefault(report => report.Status == "Pending");
-
-        return Json(new
-        {
-            isRunning = activeVisible && snapshot.IsRunning,
-            reportRequestId = activeVisible ? snapshot.ReportRequestId : 0,
-            reportId = activeVisible ? snapshot.ReportId : next?.ReportId ?? "",
-            stage = activeVisible ? snapshot.Stage : next != null ? "Queued" : "Idle",
-            message = activeVisible ? snapshot.Message : next != null ? "Waiting for the active backend report to finish." : "No report is currently running.",
-            pct = activeVisible ? snapshot.Pct : 0,
-            done = activeVisible ? snapshot.Done : 0,
-            total = activeVisible ? snapshot.Total : 0,
-            facility = activeVisible ? snapshot.Facility : "",
-            dateRange = activeVisible ? snapshot.DateRange : "",
-            startedAt = activeVisible ? snapshot.StartedAt : (DateTime?)null,
-            pendingCount = queued.Count(report => report.Status == "Pending"),
-            activeAgents = activeVisible && snapshot.IsRunning ? 1 : 0,
-            configuredAgents = 1,
-            agentStatus = activeVisible && snapshot.IsRunning ? "Retrieving report data" : next != null ? "Waiting" : "Idle",
-            hasWork = queued.Count > 0
-        });
+        queued = queued.Where(report => ReportGenerationStatus.IsVisible(report, facilityIds)).ToList();
+        return Json(ReportGenerationStatus.Build(queued, ReportGenerationState.Get(), reportType));
     }
 
     [HttpGet]
@@ -275,6 +261,8 @@ public class ReportSchedulerController : Controller
     {
         var report = await _reportService.GetReportByIdAsync(id);
         if (report == null || string.IsNullOrEmpty(report.FilePath))
+            return NotFound();
+        if (!ReportGenerationStatus.IsVisible(report, await GetUserFacilityIdsAsync()))
             return NotFound();
 
         var filePath = ResolveReportFilePath(report.FilePath);
@@ -305,7 +293,9 @@ public class ReportSchedulerController : Controller
         }
 
         var activeReport = ReportGenerationState.Get();
-        if (activeReport.IsRunning && activeReport.ReportRequestId == report.Id)
+        if (!ReportGenerationStatus.IsVisible(report, await GetUserFacilityIdsAsync()))
+            return NotFound();
+        if (report.Status == "Processing" || (activeReport.IsRunning && activeReport.ReportRequestId == report.Id))
         {
             TempData["Error"] = $"Report {report.ReportId} is still running and cannot be deleted yet.";
             return RedirectToAction(GetActionName(report.ReportType));
@@ -332,12 +322,14 @@ public class ReportSchedulerController : Controller
             reportType = "ClaimSummary";
 
         var activeReport = ReportGenerationState.Get();
-        var query = _context.ReportRequests.Where(r => r.ReportType == reportType);
+        var query = _context.ReportRequests.Where(r => r.ReportType == reportType && r.Status != "Processing" && r.Status != "Pending");
 
         if (activeReport.IsRunning)
             query = query.Where(r => r.Id != activeReport.ReportRequestId);
 
         var reports = await query.ToListAsync();
+        var facilityIds = await GetUserFacilityIdsAsync();
+        reports = reports.Where(report => ReportGenerationStatus.IsVisible(report, facilityIds)).ToList();
         var filePaths = reports
             .Select(r => ResolveReportFilePath(r.FilePath))
             .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -367,7 +359,7 @@ public class ReportSchedulerController : Controller
             "wwwroot",
             reportFilePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
 
-        return filePath.StartsWith(webRoot, StringComparison.OrdinalIgnoreCase) ? filePath : null;
+        return filePath.StartsWith(webRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ? filePath : null;
     }
 
     private static void DeleteReportFile(string? filePath)

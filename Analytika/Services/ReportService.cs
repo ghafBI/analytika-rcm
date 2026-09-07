@@ -76,25 +76,22 @@ public class ReportService : IReportService
 
     public async Task<string> QueueReportAsync(ReportRequest request, string? selectedDateRange = null)
     {
+        ReportFilterSupport.Validate(request);
         await QueueGate.WaitAsync();
         try
         {
             var duplicateCutoff = DateTime.UtcNow.AddMinutes(-10);
-            var existing = await _context.ReportRequests
+            var candidates = await _context.ReportRequests
                 .AsNoTracking()
                 .Where(r => r.RequestedAt >= duplicateCutoff)
                 .Where(r => r.Status == "Pending" || r.Status == "Processing")
                 .Where(r => r.ReportType == request.ReportType
-                    && r.BranchId == request.BranchId
-                    && r.ReceiverId == request.ReceiverId
-                    && r.PayerId == request.PayerId
-                    && r.ClinicianId == request.ClinicianId
-                    && r.DepartmentId == request.DepartmentId
                     && r.DateFrom.Date == request.DateFrom.Date
                     && r.DateTo.Date == request.DateTo.Date
                     && r.SearchCriteria == request.SearchCriteria)
                 .OrderByDescending(r => r.RequestedAt)
-                .FirstOrDefaultAsync();
+                .ToListAsync();
+            var existing = candidates.FirstOrDefault(candidate => ReportRequestEquivalence.Matches(candidate, request));
 
             if (existing != null)
             {
@@ -114,20 +111,8 @@ public class ReportService : IReportService
             QueueGate.Release();
         }
 
-        var facilityName = request.BranchId.HasValue
-            ? (await _context.Facilities
-                .Where(f => f.Id == request.BranchId.Value)
-                .Select(f => f.Name)
-                .FirstOrDefaultAsync()) ?? "Facility"
-            : "All";
-
-        ReportGenerationState.Start(
-            request.Id,
-            request.ReportId,
-            request.ReportType,
-            facilityName,
-            selectedDateRange ?? BuildDateRangeLabel(request.DateFrom, request.DateTo));
-
+        // Queueing is durable state, not evidence that a worker is running.
+        // Only the generator that acquires the execution gate owns live progress.
         var externalWorkerEnabled = _configuration.GetValue("Reports:ExternalWorkerEnabled", false);
         var externalReportTypes = _configuration.GetSection("Reports:ExternalWorkerReportTypes").Get<string[]>() ?? [];
         var useExternalWorker = externalWorkerEnabled && externalReportTypes.Contains(request.ReportType, StringComparer.OrdinalIgnoreCase);
@@ -187,6 +172,8 @@ public class ReportService : IReportService
 
     public async Task<(List<ReportRequest> Reports, int Total)> GetReportsAsync(string reportType, int page, int pageSize, List<int>? facilityIds = null)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var query = _context.ReportRequests
             .Include(r => r.Branch)
             .Include(r => r.Receiver)
@@ -197,6 +184,15 @@ public class ReportService : IReportService
             // null = global user (no restriction); empty list = facility user with no assignments (no results); non-empty = scope to those facilities
             .Where(r => facilityIds == null || (facilityIds.Count > 0 && r.BranchId != null && facilityIds.Contains(r.BranchId.Value)))
             .OrderByDescending(r => r.RequestedAt);
+
+        // CSV scope may include facilities beyond BranchId. Authorize every
+        // facility before paging so totals and pages cannot leak other scopes.
+        if (facilityIds != null)
+        {
+            var scoped = (await query.ToListAsync())
+                .Where(report => ReportGenerationStatus.IsVisible(report, facilityIds)).ToList();
+            return (scoped.Skip((page - 1) * pageSize).Take(pageSize).ToList(), scoped.Count);
+        }
 
         var total = await query.CountAsync();
         var reports = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
@@ -264,8 +260,11 @@ public class ReportService : IReportService
 
         if (report == null) return;
 
+        ReportGenerationState.Start(report.Id, report.ReportId, report.ReportType,
+            report.Branch?.Name ?? "All", BuildDateRangeLabel(report.DateFrom, report.DateTo));
         try
         {
+            ReportFilterSupport.Validate(report);
             static List<int> Ids(string? csv, int? fallback = null)
             {
                 var ids = (csv ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -766,11 +765,14 @@ public class ReportService : IReportService
                 }
                 catch (Exception emailEx)
                 {
+                    report.Status = "CompletedEmailFailed";
                     _logger.LogWarning(emailEx, "Report {ReportId} generated but email delivery failed.", report.ReportId);
                 }
             }
 
-            ReportGenerationState.Finish(report.Id, $"Report {report.ReportId} completed successfully.");
+            ReportGenerationState.Finish(report.Id, report.Status == "CompletedEmailFailed"
+                ? "Report generated and available to download. Email delivery failed; contact an administrator to check email settings."
+                : $"Report {report.ReportId} completed successfully.");
         }
         catch (Exception ex)
         {
@@ -972,10 +974,16 @@ public class ReportService : IReportService
         if (!string.IsNullOrWhiteSpace(report.EmailTo))
         {
             try { await _emailService.SendReportAsync(report.EmailTo, report.ReportId, report.ReportType, filePath); }
-            catch (Exception exception) { _logger.LogWarning(exception, "Audit report {ReportId} generated but email delivery failed.", report.ReportId); }
+            catch (Exception exception)
+            {
+                report.Status = "CompletedEmailFailed";
+                _logger.LogWarning(exception, "Audit report {ReportId} generated but email delivery failed.", report.ReportId);
+            }
         }
         await _context.SaveChangesAsync();
-        ReportGenerationState.Finish(report.Id, $"Audit report {report.ReportId} completed with {flags.Count:N0} review flag(s).");
+        ReportGenerationState.Finish(report.Id, report.Status == "CompletedEmailFailed"
+            ? "Audit report generated and available to download. Email delivery failed; contact an administrator to check email settings."
+            : $"Audit report {report.ReportId} completed with {flags.Count:N0} review flag(s).");
     }
 
     private static void ApplyReportFilterHeader(IXLWorksheet ws, int lastColumn, ReportRequest report)

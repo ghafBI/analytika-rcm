@@ -407,15 +407,10 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-semibold">Department</label>
-                        <select name="SelectedDepartments" class="form-select select2-multi" multiple>
-                            @if (Model.Departments != null)
-                            {
-                                @foreach (SelectListItem item in Model.Departments)
-                                {
-                                    <option value="@item.Value">@item.Text</option>
-                                }
-                            }
+                        <select id="departmentFilter" class="form-select" disabled aria-describedby="departmentFilterHelp">
+                            <option>Unavailable</option>
                         </select>
+                        <small id="departmentFilterHelp" class="form-text">Claims do not yet have a verified department mapping.</small>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-semibold">Encounter Type</label>
@@ -471,7 +466,7 @@
             <div>
                 <div class="generation-status-title">
                     <i class="fas fa-gears me-2"></i><span id="generationStage">Backend processing</span>
-                    <span id="generationAgentCount" class="report-agent-count"><i class="fas fa-robot"></i>0 / 1 agents active</span>
+                    <span id="generationAgentCount" class="report-agent-count">Checking report workers...</span>
                 </div>
                 <div id="generationMeta" class="generation-status-meta"></div>
             </div>
@@ -525,19 +520,19 @@
                             @foreach (var report in Model.RecentReports)
                             {
                                 <tr>
-                                    <td><a href="#" class="report-id-link">@report.ReportId</a></td>
+                                    <td><span class="report-id-link">@report.ReportId</span></td>
                                     <td>@(report.Branch?.Name ?? "All")</td>
                                     <td>@(report.Receiver?.Name ?? "All")</td>
                                     <td>@(report.Payer?.Name ?? "All")</td>
                                     <td>@(report.Clinician?.Name ?? "All")</td>
                                     <td>
-                                        <span class="status-@report.Status.ToLower()">@report.Status</span>
+                                        <span class="status-@(report.Status == "CompletedEmailFailed" ? "failed" : report.Status.ToLower())">@(report.Status == "CompletedEmailFailed" ? "Completed — email failed" : report.Status)</span>
                                     </td>
                                     <td>@report.DateFrom.ToString("dd/MM/yyyy") - @report.DateTo.ToString("dd/MM/yyyy")</td>
                                     <td>@(report.GeneratedAt?.ToString("dd/MM/yyyy HH:mm") ?? "-")</td>
                                     <td>
                                         <div class="d-flex align-items-center gap-1">
-                                            @if (report.Status == "Completed" && !string.IsNullOrEmpty(report.FilePath))
+                                            @if ((report.Status == "Completed" || report.Status == "CompletedEmailFailed") && !string.IsNullOrEmpty(report.FilePath))
                                             {
                                                 <a asp-controller="ReportScheduler" asp-action="Download" asp-route-id="@report.Id"
                                                    class="btn btn-download" title="Download">
@@ -624,24 +619,34 @@
 
             const pct = Math.max(0, Math.min(100, Number(state.pct) || 0));
             document.getElementById('generationStage').textContent = state.stage || 'Processing';
-            document.getElementById('generationPercent').textContent = pct + '%';
-            document.getElementById('generationProgressBar').style.width = pct + '%';
-            card.querySelector('[role="progressbar"]').setAttribute('aria-valuenow', pct);
+            const progressAvailable = state.progressAvailable !== false;
+            document.getElementById('generationPercent').textContent = progressAvailable ? pct + '%' : 'Progress unavailable';
+            document.getElementById('generationProgressBar').style.width = progressAvailable ? pct + '%' : '0%';
+            const progressBar = card.querySelector('[role="progressbar"]');
+            if (progressAvailable) progressBar.setAttribute('aria-valuenow', pct);
+            else progressBar.removeAttribute('aria-valuenow');
+            progressBar.setAttribute('aria-valuetext', progressAvailable ? pct + '%' : 'Progress unavailable');
             document.getElementById('generationMeta').textContent = [state.reportId, state.facility, state.dateRange].filter(Boolean).join(' · ');
             document.getElementById('generationMessage').textContent = state.message || 'Backend processing is active.';
 
             const counts = [];
             if (state.total > 0) counts.push(Number(state.done).toLocaleString() + ' of ' + Number(state.total).toLocaleString() + ' records');
             if (state.pendingCount > 0) counts.push(state.pendingCount + ' report' + (state.pendingCount === 1 ? '' : 's') + ' waiting');
+            if (state.processingCount > 0) counts.push(state.processingCount + ' report' + (state.processingCount === 1 ? '' : 's') + ' marked processing');
             if (!state.hasWork) counts.push('Queue clear');
             document.getElementById('generationCounts').textContent = counts.join(' · ');
-            const activeAgents = Number(state.activeAgents) || 0;
-            const configuredAgents = Number(state.configuredAgents) || 1;
-            document.getElementById('generationAgentCount').innerHTML = '<i class="fas fa-robot"></i>' + activeAgents + ' / ' + configuredAgents + ' agents active';
+            document.getElementById('generationAgentCount').textContent = state.activeAgents == null
+                ? 'Worker count unavailable'
+                : Number(state.activeAgents) + ' report worker' + (Number(state.activeAgents) === 1 ? '' : 's') + ' observed';
         } catch {
             card.classList.add('is-visible');
             document.getElementById('generationStage').textContent = 'Status temporarily unavailable';
-            document.getElementById('generationMessage').textContent = 'The report continues in the backend. This panel will retry automatically.';
+            document.getElementById('generationMessage').textContent = 'Backend status could not be verified. This panel will retry automatically.';
+            document.getElementById('generationAgentCount').textContent = 'Worker count unavailable';
+            document.getElementById('generationPercent').textContent = 'Progress unavailable';
+            document.getElementById('generationProgressBar').style.width = '0%';
+            card.querySelector('[role="progressbar"]').removeAttribute('aria-valuenow');
+            card.querySelector('[role="progressbar"]').setAttribute('aria-valuetext', 'Progress unavailable');
         }
     }
 

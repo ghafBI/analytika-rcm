@@ -24,12 +24,12 @@ public class EmailService : IEmailService
 
         if (string.IsNullOrWhiteSpace(smtp.Host))
         {
-            _logger.LogWarning("SMTP host is not configured — skipping email for {ReportId}.", reportId);
-            return;
+            throw new InvalidOperationException("Report email delivery is unavailable: SMTP host is not configured.");
         }
 
         var recipients = to.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (recipients.Length == 0) return;
+        if (recipients.Length == 0) throw new InvalidOperationException("No report email recipients were supplied.");
+        if (!File.Exists(filePath)) throw new FileNotFoundException("The report attachment is unavailable.");
 
         try
         {
@@ -61,6 +61,7 @@ public class EmailService : IEmailService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send report {ReportId} to {To}.", reportId, to);
+            throw;
         }
     }
 

@@ -17,6 +17,7 @@ public class DashboardService : IDashboardService
     private const string CacheKey = "dashboard:facilitystatus:v1";
     private const string CacheKeyRefreshingFlag = "dashboard:facilitystatus:refreshing";
     private static readonly SemaphoreSlim SnapshotLock = new(1, 1);
+    private static readonly SemaphoreSlim RcmBuildLock = new(1, 1);
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan SoftTtl  = TimeSpan.FromMinutes(2);
 
@@ -315,7 +316,40 @@ public class DashboardService : IDashboardService
         };
     }
 
-    public async Task<RCMDashboardViewModel> BuildRcmDashboardAsync(string tab, RcmDashboardFilters filters)
+    public Task<RCMDashboardViewModel> BuildRcmDashboardAsync(string tab, RcmDashboardFilters filters)
+        => BuildRcmDashboardAsync(tab, filters, CancellationToken.None);
+
+    public async Task<RCMDashboardViewModel> BuildRcmDashboardAsync(string tab, RcmDashboardFilters filters, CancellationToken cancellationToken)
+    {
+        filters ??= new RcmDashboardFilters();
+        var key = "dashboard:rcm:result:v1:" + System.Text.Json.JsonSerializer.Serialize(new
+        {
+            Tab = tab.ToUpperInvariant(),
+            Facilities = filters.FacilityIds.Distinct().OrderBy(x => x).ToArray(),
+            Receivers = filters.Receivers.Distinct().OrderBy(x => x, StringComparer.Ordinal).ToArray(),
+            Payers = filters.Payers.Distinct().OrderBy(x => x, StringComparer.Ordinal).ToArray(),
+            Encounters = filters.EncounterTypes.Distinct().OrderBy(x => x, StringComparer.Ordinal).ToArray(),
+            filters.DateFrom, filters.DateTo
+        });
+        if (_cache.TryGetValue<RCMDashboardViewModel>(key, out var cached) && cached != null)
+            return cached;
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(TimeSpan.FromSeconds(60));
+        // Coalesce repeated requests and prevent simultaneous cold scans from
+        // overwhelming SQLite. All authorized scope values are in the cache key.
+        await RcmBuildLock.WaitAsync(budget.Token);
+        try
+        {
+            if (_cache.TryGetValue<RCMDashboardViewModel>(key, out cached) && cached != null)
+                return cached;
+            var result = await BuildRcmDashboardCoreAsync(tab, filters, budget.Token);
+            _cache.Set(key, result, TimeSpan.FromSeconds(30));
+            return result;
+        }
+        finally { RcmBuildLock.Release(); }
+    }
+
+    private async Task<RCMDashboardViewModel> BuildRcmDashboardCoreAsync(string tab, RcmDashboardFilters filters, CancellationToken ct)
     {
         filters ??= new RcmDashboardFilters();
 
@@ -324,7 +358,7 @@ public class DashboardService : IDashboardService
             .Where(f => f.IsActive)
             .OrderBy(f => f.Name)
             .Select(f => new DashboardFilterOption { Value = f.Id.ToString(), Label = f.Name })
-            .ToListAsync();
+            .ToListAsync(ct);
 
         // These 3 dropdown-option lists are full-table Distinct() scans over
         // XmlParsedRecords. They were re-run on every tab click / filter change
@@ -346,16 +380,16 @@ public class DashboardService : IDashboardService
                 //   IX_XmlParsedRecords_Payer    (PayerName, PayerId)
                 //   IX_XmlParsedRecords_Encounter(EncounterType)
                 var conn = _db.Database.GetDbConnection();
-                if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+                if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync(ct);
 
                 async Task<List<string>> DistinctAsync(string sql)
                 {
                     var list = new List<string>();
                     using var cmd = conn.CreateCommand();
                     cmd.CommandText = sql;
-                    cmd.CommandTimeout = 300;
-                    using var rdr = await cmd.ExecuteReaderAsync();
-                    while (await rdr.ReadAsync())
+                    cmd.CommandTimeout = 60;
+                    using var rdr = await cmd.ExecuteReaderAsync(ct);
+                    while (await rdr.ReadAsync(ct))
                         if (!rdr.IsDBNull(0)) list.Add(rdr.GetString(0));
                     return list;
                 }
@@ -364,27 +398,27 @@ public class DashboardService : IDashboardService
                 // that carry no name (same result the coalesce produced).
                 var receivers = (await DistinctAsync(
                         @"SELECT DISTINCT ""ReceiverName"" FROM ""XmlParsedRecords""
-                          WHERE ""ReceiverName"" IS NOT NULL AND ""ReceiverName"" <> '' ORDER BY 1 LIMIT 80"))
+                          WHERE ""ReceiverName"" IS NOT NULL AND ""ReceiverName"" <> '' ORDER BY 1"))
                     .Concat(await DistinctAsync(
                         @"SELECT DISTINCT ""ReceiverId"" FROM ""XmlParsedRecords""
                           WHERE (""ReceiverName"" IS NULL OR ""ReceiverName"" = '')
-                            AND ""ReceiverId"" IS NOT NULL AND ""ReceiverId"" <> '' ORDER BY 1 LIMIT 80"))
-                    .Distinct().OrderBy(v => v).Take(80)
+                            AND ""ReceiverId"" IS NOT NULL AND ""ReceiverId"" <> '' ORDER BY 1"))
+                    .Distinct().OrderBy(v => v)
                     .Select(v => new DashboardFilterOption { Value = v, Label = v }).ToList();
 
                 var payers = (await DistinctAsync(
                         @"SELECT DISTINCT ""PayerName"" FROM ""XmlParsedRecords""
-                          WHERE ""PayerName"" IS NOT NULL AND ""PayerName"" <> '' ORDER BY 1 LIMIT 80"))
+                          WHERE ""PayerName"" IS NOT NULL AND ""PayerName"" <> '' ORDER BY 1"))
                     .Concat(await DistinctAsync(
                         @"SELECT DISTINCT ""PayerId"" FROM ""XmlParsedRecords""
                           WHERE (""PayerName"" IS NULL OR ""PayerName"" = '')
-                            AND ""PayerId"" IS NOT NULL AND ""PayerId"" <> '' ORDER BY 1 LIMIT 80"))
-                    .Distinct().OrderBy(v => v).Take(80)
+                            AND ""PayerId"" IS NOT NULL AND ""PayerId"" <> '' ORDER BY 1"))
+                    .Distinct().OrderBy(v => v)
                     .Select(v => new DashboardFilterOption { Value = v, Label = v }).ToList();
 
                 var encounterTypes = (await DistinctAsync(
                         @"SELECT DISTINCT ""EncounterType"" FROM ""XmlParsedRecords""
-                          WHERE ""EncounterType"" IS NOT NULL AND ""EncounterType"" <> '' ORDER BY 1 LIMIT 80"))
+                          WHERE ""EncounterType"" IS NOT NULL AND ""EncounterType"" <> '' ORDER BY 1"))
                     .Select(v => new DashboardFilterOption { Value = v, Label = v }).ToList();
 
                 return (receivers, payers, encounterTypes);
@@ -457,7 +491,7 @@ public class DashboardService : IDashboardService
             DeniedAmount = g.Where(r => r.RecordKind == "Remittance" && r.DenialCodesJson != null && r.DenialCodesJson != "" && r.DenialCodesJson != "[]").Sum(r => r.NetAmount - r.PaidAmount),
             Unmatched = g.Count(r => !r.IsMatched),
             UnmatchedAmount = g.Where(r => !r.IsMatched).Sum(r => r.NetAmount - r.PaidAmount)
-        }).SingleOrDefaultAsync();
+        }).SingleOrDefaultAsync(ct);
 
         var lifecycle = lifecycleSnapshot == null
             ? new List<RcmLifecycleStage>()
@@ -481,34 +515,30 @@ public class DashboardService : IDashboardService
         };
 
         // ── Aggregate KPI metrics from real data ──
-        // Keep the cold path to one SQLite scan. The previous implementation
-        // issued separate COUNT/SUM queries (and repeated matched counts),
-        // which made the request exceed the reverse-proxy timeout on large DBs.
-        var kpi = await tabQuery
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                TotalClaims = g.Count(),
-                NetTotal = g.Sum(r => r.NetAmount),
-                GrossTotal = g.Sum(r => r.GrossAmount),
-                PaidTotal = g.Sum(r => r.PaidAmount),
-                Matched = g.Count(r => r.IsMatched)
-            })
-            .FirstOrDefaultAsync();
-
-        var totalClaims = kpi?.TotalClaims ?? 0;
-        var netTotal = kpi?.NetTotal ?? 0m;
-        var grossTotal = kpi?.GrossTotal ?? 0m;
-        var paidTotal = kpi?.PaidTotal ?? 0m;
-
         // Compute prior-period comparison (last 30d vs prev 30d)
         var now = DateTime.UtcNow;
         var thirtyDaysAgo = now.AddDays(-30).ToString("yyyy-MM-dd");
         var sixtyDaysAgo = now.AddDays(-60).ToString("yyyy-MM-dd");
-        var currentPeriod = await tabQuery.CountAsync(r => string.Compare(r.TreatmentDate ?? "", thirtyDaysAgo) >= 0);
-        var priorPeriod = await tabQuery.CountAsync(r =>
-            string.Compare(r.TreatmentDate ?? "", sixtyDaysAgo) >= 0 &&
-            string.Compare(r.TreatmentDate ?? "", thirtyDaysAgo) < 0);
+        // Keep decimal aggregation in the database while obtaining all KPI values
+        // in one query. An empty scope has no group and retains zero totals.
+        var kpiSnapshot = await tabQuery.GroupBy(_ => 1).Select(g => new
+        {
+            TotalClaims = g.Count(),
+            NetTotal = g.Sum(r => r.NetAmount),
+            GrossTotal = g.Sum(r => r.GrossAmount),
+            PaidTotal = g.Sum(r => r.PaidAmount),
+            Matched = g.Count(r => r.IsMatched),
+            CurrentPeriod = g.Count(r => string.Compare(r.TreatmentDate ?? "", thirtyDaysAgo) >= 0),
+            PriorPeriod = g.Count(r =>
+                string.Compare(r.TreatmentDate ?? "", sixtyDaysAgo) >= 0 &&
+                string.Compare(r.TreatmentDate ?? "", thirtyDaysAgo) < 0)
+        }).SingleOrDefaultAsync(ct);
+        var totalClaims = kpiSnapshot?.TotalClaims ?? 0;
+        var netTotal = kpiSnapshot?.NetTotal ?? 0m;
+        var grossTotal = kpiSnapshot?.GrossTotal ?? 0m;
+        var paidTotal = kpiSnapshot?.PaidTotal ?? 0m;
+        var currentPeriod = kpiSnapshot?.CurrentPeriod ?? 0;
+        var priorPeriod = kpiSnapshot?.PriorPeriod ?? 0;
         var claimDelta = priorPeriod > 0
             ? ((currentPeriod - priorPeriod) * 100.0 / priorPeriod)
             : 0;
@@ -546,8 +576,8 @@ public class DashboardService : IDashboardService
                 new DashboardMetric
                 {
                     Label = "Matched",
-                    Value = $"{kpi?.Matched ?? 0:N0}",
-                    Delta = totalClaims > 0 ? $"{((kpi?.Matched ?? 0) * 100.0 / totalClaims):F0}%" : "",
+                    Value = $"{kpiSnapshot?.Matched ?? 0:N0}",
+                    Delta = totalClaims > 0 ? $"{((kpiSnapshot?.Matched ?? 0) * 100.0 / totalClaims):F0}%" : "",
                     Icon = "fa-link",
                     Tone = "blue"
                 }
@@ -606,7 +636,7 @@ public class DashboardService : IDashboardService
             .Where(r => r.ServiceYear != null && r.ServiceMonth != null)
             .GroupBy(r => new { r.ServiceYear, r.ServiceMonth })
             .Select(g => new { g.Key.ServiceYear, g.Key.ServiceMonth, Count = g.Count() })
-            .ToListAsync();
+            .ToListAsync(ct);
 
         var latestMonth = trendData
             .Select(t => DateTime.TryParseExact(
@@ -653,16 +683,16 @@ public class DashboardService : IDashboardService
                 Issue = r.RecordKind == "Remittance" ? "Submission not found" : "Remittance not received"
             })
             .Take(6)
-            .ToListAsync();
+            .ToListAsync(ct);
 
         // ── Breakdown: top categories by tab ──
         var breakdown = activeTab switch
         {
-            "Denials" => await BuildBreakdownByDenialCategory(tabQuery),
-            "Clinicians" => await BuildBreakdownByField(q, r => r.Clinician ?? "Unknown"),
-            "Insurance" => await BuildBreakdownByField(tabQuery, r => r.PayerName ?? r.PayerId ?? "Unknown"),
-            "Department" => await BuildBreakdownByField(tabQuery, r => r.EncounterType ?? "Unknown"),
-            _ => await BuildBreakdownByField(tabQuery, r => r.EncounterType ?? "Unknown")
+            "Denials" => await BuildBreakdownByDenialCategory(tabQuery, ct),
+            "Clinicians" => await BuildBreakdownByField(q, r => r.Clinician ?? "Unknown", ct),
+            "Insurance" => await BuildBreakdownByField(tabQuery, r => r.PayerName ?? r.PayerId ?? "Unknown", ct),
+            "Department" => await BuildBreakdownByField(tabQuery, r => r.EncounterType ?? "Unknown", ct),
+            _ => await BuildBreakdownByField(tabQuery, r => r.EncounterType ?? "Unknown", ct)
         };
 
         // ── Insights: data-driven observations ──
@@ -707,7 +737,7 @@ public class DashboardService : IDashboardService
 
     private async Task<List<DashboardBreakdownItem>> BuildBreakdownByField(
         IQueryable<XmlParsedRecord> query,
-        System.Linq.Expressions.Expression<Func<XmlParsedRecord, string>> fieldSelector)
+        System.Linq.Expressions.Expression<Func<XmlParsedRecord, string>> fieldSelector, CancellationToken ct)
     {
         return await query
             .GroupBy(fieldSelector)
@@ -719,11 +749,11 @@ public class DashboardService : IDashboardService
             })
             .OrderByDescending(b => b.Value)
             .Take(6)
-            .ToListAsync();
+            .ToListAsync(ct);
     }
 
     private async Task<List<DashboardBreakdownItem>> BuildBreakdownByDenialCategory(
-        IQueryable<XmlParsedRecord> query)
+        IQueryable<XmlParsedRecord> query, CancellationToken ct)
     {
         var categories = await query
             .Where(r => r.ClaimCategory != null && r.ClaimCategory != "")
@@ -736,7 +766,7 @@ public class DashboardService : IDashboardService
             })
             .OrderByDescending(b => b.Value)
             .Take(6)
-            .ToListAsync();
+            .ToListAsync(ct);
         return categories.Count > 0 ? categories
             : new List<DashboardBreakdownItem> { new() { Label = "No denial data", Value = 0, Detail = "Upload remittance files to see denial categories" } };
     }

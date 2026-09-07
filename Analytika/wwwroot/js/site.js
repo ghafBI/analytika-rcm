@@ -32,13 +32,14 @@
     };
 
     document.addEventListener('click', function(e) {
+        if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
         var link = e.target.closest('a[href]');
-        if (!link || link.target || link.hasAttribute('download') || link.dataset.noLoader === 'true') return;
+        if (!link || link.target || link.hasAttribute('download') || link.hasAttribute('data-confirm') || link.dataset.noLoader === 'true') return;
         var href = link.getAttribute('href') || '';
         if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0 || href.indexOf('mailto:') === 0) return;
         try {
             var next = new URL(href, window.location.href);
-            if (next.origin === window.location.origin && next.pathname !== window.location.pathname + window.location.search) {
+            if (next.origin === window.location.origin && next.pathname + next.search !== window.location.pathname + window.location.search) {
                 window.showAppLoader();
             }
         } catch (_) {}
@@ -46,6 +47,13 @@
 
     window.addEventListener('beforeunload', function() {
         setVisible(true);
+    });
+
+    window.addEventListener('pageshow', function() {
+        activeCount = 0;
+        if (showTimer) window.clearTimeout(showTimer);
+        showTimer = null;
+        setVisible(false);
     });
 
     if (window.fetch) {
@@ -207,7 +215,11 @@ function showToast(message, type) {
 // ── Submit button loading state ───────────────────────────────────────────────
 (function initLoadingButtons() {
     document.querySelectorAll('form').forEach(function(form) {
-        form.addEventListener('submit', function() {
+        form.addEventListener('submit', function(event) {
+            // Wait for validation/AJAX handlers to cancel submission. Otherwise
+            // invalid forms leave an unmatched global-loader reference active.
+            queueMicrotask(function() {
+            if (event.defaultPrevented || !form.checkValidity()) return;
             var btn = form.querySelector('[data-loading-text]');
             if (btn && !btn.disabled) {
                 var originalHtml = btn.innerHTML;
@@ -216,6 +228,7 @@ function showToast(message, type) {
                 setTimeout(function() { btn.disabled = false; btn.innerHTML = originalHtml; }, 15000);
             }
             window.showAppLoader();
+            });
         });
     });
 })();
@@ -285,10 +298,23 @@ $(document).ready(function() {
 
                 var $row = $('<span class="select2-checkbox-option"></span>');
                 var $checkbox = $('<input type="checkbox" tabindex="-1" aria-hidden="true" />')
+                    .data('option-value', String(option.id))
                     .prop('checked', Boolean(option.element && option.element.selected));
                 $row.append($checkbox, $('<span></span>').text(option.text));
                 return $row;
             }
+        });
+
+        // Select2 reuses result rows while the dropdown stays open. Its own
+        // selection styling updates, but templateResult is not rerun on change.
+        $('.select2-multi').off('.bixCheckboxSync').on('change.bixCheckboxSync select2:open.bixCheckboxSync', function() {
+            var $select = $(this);
+            var instance = $select.data('select2');
+            if (!instance || !instance.$results) return;
+            var selected = new Set(($select.val() || []).map(String));
+            instance.$results.find('.select2-checkbox-option input').each(function() {
+                $(this).prop('checked', selected.has($(this).data('option-value')));
+            });
         });
 
         // Report Scheduler filters support explicit bulk selection. Keep the
@@ -308,7 +334,9 @@ $(document).ready(function() {
             var $selectAll = $('<button type="button" class="multi-select-action">Select all</button>')
                 .attr('aria-controls', selectId)
                 .on('click', function() {
-                    var values = $select.find('option:not(:disabled)').map(function() { return this.value; }).get();
+                    var values = $select.find('option:not(:disabled)').filter(function() {
+                        return this.value !== '' && !$(this).parent('optgroup').prop('disabled');
+                    }).map(function() { return this.value; }).get();
                     $select.val(values).trigger('change');
                 });
             var $clear = $('<button type="button" class="multi-select-action">Clear</button>')

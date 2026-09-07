@@ -62,8 +62,7 @@ public static class ModuleRegistration
         services.AddSingleton<ICredentialProtector, CredentialProtector>();
 
         services.AddHealthChecks()
-            .AddDbContextCheck<AppDbContext>()
-            .AddCheck<SyncHealthCheck>("portal-sync");
+            .AddCheck<SyncHealthCheck>("portal-sync", timeout: TimeSpan.FromSeconds(10));
 
         // Telemetry export is opt-in: set OTEL_EXPORTER_OTLP_ENDPOINT
         // (Grafana Cloud / Better Stack / any OTLP collector) to enable.

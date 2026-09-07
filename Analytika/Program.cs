@@ -66,6 +66,22 @@ var dataDir = Environment.GetEnvironmentVariable("DB_DIR")
 Directory.CreateDirectory(dataDir);
 var dbPath = Path.Combine(dataDir, "analytika.db");
 
+// Explicit detached lookup repair exits before migrations, pending DB replacement,
+// service registration, web hosting, or background job startup.
+if (args.Contains("--repair-report-lookups", StringComparer.OrdinalIgnoreCase))
+{
+    if (DatabaseConfig.GetProvider(builder.Configuration) == DatabaseConfig.Postgres)
+    {
+        Console.WriteLine("Lookup repair command currently supports existing SQLite deployments only.");
+        Environment.ExitCode = 2;
+        return;
+    }
+    using var repairCancellation = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, eventArgs) => { eventArgs.Cancel = true; repairCancellation.Cancel(); };
+    Environment.ExitCode = await ReportLookupRepairCommand.RunAsync(dbPath, repairCancellation.Token);
+    return;
+}
+
 // If a pending DB was uploaded via the migration endpoint, swap it in now (before EF opens the file)
 var pendingDb = dbPath + ".pending";
 if (System.IO.File.Exists(pendingDb))
@@ -311,8 +327,32 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
-// Liveness/readiness probe for hosting platforms (checks DB connectivity)
-app.MapHealthChecks("/healthz").AllowAnonymous();
+// Liveness must not scan claims or depend on a remote portal. Keepalive and
+// supervisors must not amplify database load or restart a healthy web process.
+app.MapHealthChecks("/healthz", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false
+}).AllowAnonymous();
+// Readiness is a separate dependency signal. Public output contains only check
+// names/status; authenticated operators can inspect detailed reasons in logs.
+app.MapHealthChecks("/readyz", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(entry => new
+            {
+                name = entry.Key,
+                status = entry.Value.Status.ToString(),
+                reason = entry.Value.Status == Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy
+                    ? "Ready" : entry.Key == "portal-sync" ? "Portal synchronization is stale or unavailable" : "Dependency unavailable"
+            })
+        });
+    }
+}).AllowAnonymous();
 
 // Public liveness and deployment identity endpoint. Keep this independent of
 // database and portal readiness so supervisors only restart a dead web process.
