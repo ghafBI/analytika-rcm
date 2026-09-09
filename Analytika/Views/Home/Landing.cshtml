@@ -1,223 +1,111 @@
-@{
-    Layout = null;
-    ViewData["Title"] = "Ghaf Bi Analytix";
-}
-<!DOCTYPE html>
+@{ Layout = null; ViewData["Title"] = "BIX"; }
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Healthcare revenue cycle intelligence for UAE providers." />
-    <title>Ghaf Bi Analytix — Revenue intelligence, made actionable</title>
-    <link rel="stylesheet" href="~/lib/fontawesome.min.css" />
-    <style>
-        :root {
-            --navy: #011c40;
-            --navy-2: #06345b;
-            --teal: #007f8f;
-            --aqua: #54acbf;
-            --ink: #0f2942;
-            --muted: #587086;
-            --line: #d9e7eb;
-            --surface: #ffffff;
-            --wash: #f3f9fa;
-            --shadow: 0 24px 60px rgba(1, 28, 64, .11);
-        }
-
-        *, *::before, *::after { box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
-        body {
-            margin: 0;
-            color: var(--ink);
-            background: var(--surface);
-            font-family: Inter, "Segoe UI", system-ui, sans-serif;
-            -webkit-font-smoothing: antialiased;
-        }
-        a { color: inherit; }
-        .shell { width: min(1180px, calc(100% - 40px)); margin-inline: auto; }
-        .skip-link { position: fixed; top: 10px; left: 10px; z-index: 100; padding: 10px 14px; background: var(--navy); color: #fff; border-radius: 8px; transform: translateY(-160%); }
-        .skip-link:focus { transform: translateY(0); }
-
-        .site-header { position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.94); border-bottom: 1px solid rgba(217,231,235,.9); backdrop-filter: blur(14px); }
-        .nav { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 28px; }
-        .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; min-width: max-content; }
-        .brand img { width: 46px; height: 46px; object-fit: contain; }
-        .brand-copy { display: grid; line-height: 1.05; }
-        .brand-copy strong { color: var(--navy); font-size: 1rem; }
-        .brand-copy span { margin-top: 5px; color: var(--teal); font-size: .61rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
-        .nav-links { display: flex; align-items: center; gap: 28px; }
-        .nav-links a { color: #34536c; font-size: .88rem; font-weight: 600; text-decoration: none; }
-        .nav-links a:hover, .nav-links a:focus-visible { color: var(--teal); }
-        .nav-actions { display: flex; align-items: center; gap: 10px; }
-        .button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 0 18px; border: 1px solid transparent; border-radius: 10px; font-size: .88rem; font-weight: 700; text-decoration: none; transition: transform .15s ease, background .15s ease, box-shadow .15s ease; }
-        .button:hover { transform: translateY(-1px); }
-        .button:focus-visible, .nav-links a:focus-visible, .brand:focus-visible { outline: 3px solid rgba(84,172,191,.4); outline-offset: 3px; }
-        .button-primary { color: #fff; background: var(--navy); box-shadow: 0 10px 24px rgba(1,28,64,.18); }
-        .button-primary:hover { background: var(--navy-2); }
-        .button-secondary { color: var(--navy); background: #fff; border-color: #bcd5dc; }
-        .button-secondary:hover { border-color: var(--aqua); background: var(--wash); }
-
-        .hero { position: relative; overflow: hidden; padding: 88px 0 82px; background: linear-gradient(145deg, #fff 15%, #f2fafb 67%, #e4f4f5 100%); }
-        .hero::before { content: ""; position: absolute; width: 560px; height: 560px; top: -260px; right: -150px; border: 1px solid rgba(0,127,143,.12); border-radius: 50%; box-shadow: 0 0 0 80px rgba(84,172,191,.035), 0 0 0 160px rgba(84,172,191,.025); }
-        .hero-grid { position: relative; display: grid; grid-template-columns: minmax(0, 1.07fr) minmax(380px, .93fr); align-items: center; gap: 70px; }
-        .eyebrow { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 18px; color: var(--teal); font-size: .75rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
-        .eyebrow::before { content: ""; width: 24px; height: 2px; background: var(--aqua); }
-        h1 { margin: 0; max-width: 720px; color: var(--navy); font-size: clamp(2.65rem, 5vw, 5rem); line-height: 1.01; letter-spacing: -.055em; }
-        .hero-lede { max-width: 650px; margin: 24px 0 0; color: var(--muted); font-size: clamp(1rem, 1.7vw, 1.18rem); line-height: 1.72; }
-        .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
-        .hero-actions .button { min-height: 50px; padding-inline: 22px; }
-        .trust-line { display: flex; flex-wrap: wrap; gap: 18px; margin: 26px 0 0; padding: 0; list-style: none; color: #45657b; font-size: .8rem; font-weight: 600; }
-        .trust-line i { margin-right: 6px; color: var(--teal); }
-
-        .insight-card { position: relative; padding: 26px; border: 1px solid rgba(188,213,220,.9); border-radius: 22px; background: rgba(255,255,255,.88); box-shadow: var(--shadow); }
-        .insight-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
-        .insight-top span { color: var(--muted); font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
-        .live { display: inline-flex; align-items: center; gap: 6px; color: #218363 !important; }
-        .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #2db886; box-shadow: 0 0 0 4px rgba(45,184,134,.12); }
-        .insight-card h2 { margin: 26px 0 4px; color: var(--navy); font-size: 2.55rem; letter-spacing: -.04em; }
-        .insight-card > p { margin: 0; color: var(--muted); font-size: .85rem; }
-        .chart { height: 150px; margin-top: 26px; display: flex; align-items: end; gap: 10px; border-bottom: 1px solid var(--line); }
-        .chart span { flex: 1; min-width: 12px; height: var(--h); border-radius: 7px 7px 0 0; background: linear-gradient(180deg, var(--aqua), #b6e2e5); }
-        .card-footer { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
-        .mini-stat { padding: 13px; border-radius: 12px; background: var(--wash); }
-        .mini-stat strong { display: block; color: var(--navy); font-size: 1rem; }
-        .mini-stat span { display: block; margin-top: 4px; color: var(--muted); font-size: .68rem; }
-
-        .value-section { padding: 76px 0; }
-        .section-heading { max-width: 700px; margin-bottom: 34px; }
-        .section-heading h2 { margin: 0; color: var(--navy); font-size: clamp(1.9rem, 3vw, 2.65rem); letter-spacing: -.035em; }
-        .section-heading p { margin: 12px 0 0; color: var(--muted); line-height: 1.7; }
-        .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
-        .feature { min-height: 210px; padding: 26px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
-        .feature-icon { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 12px; color: var(--teal); background: #e9f6f7; }
-        .feature h3 { margin: 20px 0 9px; color: var(--navy); font-size: 1.02rem; }
-        .feature p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.65; }
-
-        .cta-band { margin-bottom: 76px; padding: 42px; display: flex; align-items: center; justify-content: space-between; gap: 34px; border-radius: 22px; color: #fff; background: linear-gradient(120deg, var(--navy), #075d72); overflow: hidden; }
-        .cta-band h2 { margin: 0; font-size: clamp(1.55rem, 3vw, 2.25rem); letter-spacing: -.03em; }
-        .cta-band p { margin: 9px 0 0; color: rgba(255,255,255,.72); line-height: 1.6; }
-        .cta-band .button { flex: none; color: var(--navy); background: #fff; }
-        footer { padding: 24px 0 32px; border-top: 1px solid var(--line); color: var(--muted); font-size: .78rem; }
-        .footer-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-        .footer-row img { width: 72px; height: auto; }
-
-        .reveal { animation: enter .46s ease-out both; }
-        .insight-card { animation-delay: .08s; }
-        @@keyframes enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        @@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .reveal { animation: none; } .button { transition: none; } }
-
-        @@media (max-width: 900px) {
-            .nav-links { display: none; }
-            .hero { padding-top: 64px; }
-            .hero-grid { grid-template-columns: 1fr; gap: 44px; }
-            .insight-card { max-width: 640px; }
-            .feature-grid { grid-template-columns: 1fr 1fr; }
-            .feature:last-child { grid-column: 1 / -1; }
-        }
-        @@media (max-width: 600px) {
-            .shell { width: min(100% - 28px, 1180px); }
-            .nav { min-height: 66px; gap: 10px; }
-            .brand img { width: 39px; height: 39px; }
-            .brand-copy strong { font-size: .88rem; }
-            .brand-copy span { font-size: .5rem; }
-            .nav-actions .button-secondary { display: none; }
-            .nav-actions .button-primary { min-height: 40px; padding-inline: 14px; }
-            .hero { padding: 52px 0 58px; }
-            h1 { font-size: clamp(2.35rem, 13vw, 3.35rem); }
-            .hero-lede { line-height: 1.62; }
-            .hero-actions { display: grid; }
-            .hero-actions .button { width: 100%; }
-            .trust-line { display: grid; gap: 10px; }
-            .insight-card { padding: 20px; border-radius: 18px; }
-            .insight-card h2 { font-size: 2.15rem; }
-            .chart { height: 120px; }
-            .card-footer { grid-template-columns: 1fr; }
-            .mini-stat { display: flex; align-items: center; justify-content: space-between; }
-            .mini-stat span { margin-top: 0; }
-            .value-section { padding: 56px 0; }
-            .feature-grid { grid-template-columns: 1fr; }
-            .feature:last-child { grid-column: auto; }
-            .feature { min-height: 0; }
-            .cta-band { margin-bottom: 52px; padding: 30px 24px; display: grid; }
-            .cta-band .button { width: 100%; }
-            .footer-row { align-items: flex-start; flex-direction: column; }
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#071518">
+  <meta name="description" content="BIX turns healthcare revenue-cycle data into clear priorities, accountable action and measurable recovery.">
+  <title>BIX — Revenue intelligence, made actionable</title>
+  <style>
+    :root{--ink:#071518;--ink2:#0b2024;--paper:#edf7f3;--muted:#a8bbb6;--teal:#48e0be;--lime:#d1fa54;--line:rgba(224,250,242,.14);--orange:#ffad66;--red:#ff7f73;--max:1180px}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--ink);color:var(--paper);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.5;overflow-x:hidden}a{color:inherit;text-decoration:none}button{font:inherit}.wrap{width:min(calc(100% - 40px),var(--max));margin:auto}.eyebrow{display:flex;align-items:center;gap:10px;color:var(--teal);font-size:.76rem;font-weight:800;letter-spacing:.16em;text-transform:uppercase}.eyebrow:before{content:"";width:30px;height:1px;background:var(--teal)}
+    header{position:fixed;top:0;left:0;right:0;z-index:20;background:linear-gradient(180deg,rgba(7,21,24,.96),rgba(7,21,24,.76),transparent);backdrop-filter:blur(8px)}nav{height:76px;display:flex;align-items:center;justify-content:space-between}.brand{display:flex;align-items:center;gap:13px;font-weight:850;letter-spacing:-.04em}.brand-mark{width:39px;height:39px;border-radius:12px;background:var(--lime);color:var(--ink);display:grid;place-items:center;font-size:.78rem;letter-spacing:-.08em;box-shadow:0 0 40px rgba(209,250,84,.15)}.brand small{display:block;color:var(--muted);font-size:.62rem;letter-spacing:.11em;text-transform:uppercase;font-weight:700}.navlinks{display:flex;align-items:center;gap:30px;font-size:.84rem;color:var(--muted)}.navlinks a:hover{color:var(--paper)}.nav-cta{border:1px solid var(--line);background:rgba(255,255,255,.04);padding:11px 17px;border-radius:999px!important;color:var(--paper)!important}.menu{display:none;background:none;border:0;color:var(--paper);font-size:1.5rem}
+    section{position:relative}.hero{min-height:100svh;display:grid;align-items:center;padding:130px 0 76px;background:radial-gradient(circle at 78% 25%,rgba(72,224,190,.12),transparent 28%),radial-gradient(circle at 32% 80%,rgba(209,250,84,.07),transparent 26%)}.hero-grid{display:grid;grid-template-columns:1.02fr .98fr;gap:66px;align-items:center}.hero h1{font-size:clamp(3.2rem,6vw,6.6rem);line-height:.88;letter-spacing:-.075em;margin:25px 0 28px;max-width:780px}.hero h1 em{font-style:normal;color:var(--lime)}.hero-copy{font-size:1.1rem;color:var(--muted);max-width:560px}.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:35px}.button{padding:14px 20px;border-radius:12px;font-weight:780;font-size:.9rem;display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);transition:.2s ease}.button.primary{background:var(--lime);color:var(--ink);border-color:var(--lime)}.button:hover{transform:translateY(-2px)}.button .arrow{font-size:1.1rem}.proof{margin-top:45px;display:flex;gap:22px;align-items:center;color:#cadaD5;font-size:.78rem}.proof span{display:flex;align-items:center;gap:8px}.dot{width:7px;height:7px;border-radius:99px;background:var(--teal);box-shadow:0 0 14px var(--teal)}
+    .console{background:linear-gradient(145deg,rgba(17,46,49,.88),rgba(7,21,24,.96));border:1px solid rgba(130,238,212,.23);border-radius:24px;padding:16px;box-shadow:0 40px 100px rgba(0,0,0,.36);transform:perspective(1000px) rotateY(-3deg) rotateX(1deg)}.console-top{display:flex;justify-content:space-between;align-items:center;padding:6px 5px 17px;color:var(--muted);font-size:.72rem}.window-dots{display:flex;gap:6px}.window-dots i{width:7px;height:7px;background:rgba(255,255,255,.2);border-radius:50%}.live-pill{padding:5px 9px;border:1px solid rgba(72,224,190,.22);border-radius:99px;color:var(--teal)}.screen{border-radius:16px;background:#09191c;padding:20px;min-height:470px}.screen-head{display:flex;justify-content:space-between;align-items:flex-start}.screen h3{font-size:1rem;margin:0 0 4px}.screen p{font-size:.68rem;color:var(--muted);margin:0}.range{font-size:.64rem;padding:6px 9px;background:rgba(255,255,255,.04);border-radius:7px;color:var(--muted)}.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:18px 0}.kpi{border:1px solid var(--line);border-radius:12px;padding:13px;background:rgba(255,255,255,.02)}.kpi label{font-size:.6rem;color:var(--muted);display:block}.kpi strong{font-size:1.25rem;letter-spacing:-.05em}.kpi small{display:block;font-size:.58rem;color:var(--teal);margin-top:4px}.chart-card{border:1px solid var(--line);border-radius:14px;padding:15px;background:rgba(255,255,255,.018)}.chart-title{display:flex;justify-content:space-between;font-size:.68rem;margin-bottom:12px}.chart-title span:last-child{color:var(--teal)}.bars{height:125px;display:flex;align-items:flex-end;gap:10px;border-bottom:1px solid var(--line);background:repeating-linear-gradient(to top,transparent 0,transparent 30px,rgba(255,255,255,.035) 31px)}.bar{flex:1;border-radius:4px 4px 0 0;background:linear-gradient(180deg,var(--teal),rgba(72,224,190,.25));animation:rise 1s ease both;animation-delay:var(--d)}.bar:nth-child(4),.bar:nth-child(7){background:linear-gradient(180deg,var(--lime),rgba(209,250,84,.25))}@@keyframes rise{from{height:0!important}}.issue-row{display:grid;grid-template-columns:1.4fr .8fr .5fr;gap:8px;border-bottom:1px solid var(--line);padding:11px 2px;font-size:.62rem;color:var(--muted)}.issue-row strong{color:var(--paper);font-weight:650}.risk{color:var(--orange)!important}
+    .band{border-block:1px solid var(--line);background:#091b1e}.band .wrap{display:grid;grid-template-columns:repeat(4,1fr)}.band-item{padding:25px 24px;border-left:1px solid var(--line)}.band-item:last-child{border-right:1px solid var(--line)}.band-item strong{display:block;font-size:.95rem}.band-item span{color:var(--muted);font-size:.72rem}
+    .story{padding:125px 0}.story-grid{display:grid;grid-template-columns:.78fr 1.22fr;gap:100px}.story h2,.platform h2,.evidence h2,.closing h2{font-size:clamp(2.4rem,4vw,4.7rem);line-height:.98;letter-spacing:-.06em;margin:19px 0 25px}.lead{font-size:1.05rem;color:var(--muted);max-width:620px}.sticky{position:sticky;top:120px;align-self:start}.leak-list{display:flex;flex-direction:column}.leak{display:grid;grid-template-columns:72px 1fr auto;gap:20px;align-items:start;padding:26px 0;border-bottom:1px solid var(--line)}.leak:first-child{border-top:1px solid var(--line)}.leak-num{font-size:.72rem;color:var(--teal);font-weight:800}.leak h3{font-size:1.15rem;margin:0 0 8px;letter-spacing:-.02em}.leak p{font-size:.86rem;color:var(--muted);margin:0;max-width:520px}.leak .tag{font-size:.65rem;border:1px solid var(--line);padding:6px 9px;border-radius:99px;color:var(--orange)}
+    .platform{padding:120px 0;background:var(--paper);color:var(--ink)}.platform .eyebrow{color:#087b68}.platform .eyebrow:before{background:#087b68}.platform-head{display:flex;justify-content:space-between;align-items:end;gap:30px;margin-bottom:55px}.platform-head .lead{color:#4a625d}.modules{display:grid;grid-template-columns:repeat(12,1fr);gap:15px}.module{background:white;border:1px solid #d7e6e0;border-radius:20px;padding:27px;min-height:240px;position:relative;overflow:hidden}.module:nth-child(1){grid-column:span 7;background:#0b282b;color:var(--paper);border-color:#0b282b}.module:nth-child(2){grid-column:span 5}.module:nth-child(3){grid-column:span 4}.module:nth-child(4){grid-column:span 4}.module:nth-child(5){grid-column:span 4;background:var(--lime);border-color:var(--lime)}.module-icon{width:44px;height:44px;border-radius:13px;border:1px solid currentColor;display:grid;place-items:center;font-weight:850;margin-bottom:38px}.module h3{font-size:1.3rem;margin:0 0 9px;letter-spacing:-.035em}.module p{font-size:.84rem;color:#54706a;margin:0;max-width:420px}.module:nth-child(1) p{color:#adc3bd}.module-status{position:absolute;right:21px;top:21px;font-size:.62rem;padding:6px 9px;border-radius:99px;background:#edf5f2;color:#47635d;text-transform:uppercase;letter-spacing:.08em;font-weight:800}.module:nth-child(1) .module-status{background:rgba(72,224,190,.12);color:var(--teal)}.module:nth-child(5) .module-status{background:rgba(7,21,24,.09);color:var(--ink)}
+    .flow{margin-top:70px;background:#dcece6;border-radius:22px;padding:30px}.flow-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:0}.flow-step{padding:10px 22px;border-right:1px solid #bfd3cc;position:relative}.flow-step:last-child{border:0}.flow-step b{display:block;font-size:.72rem;color:#087b68;margin-bottom:7px}.flow-step span{font-size:.8rem;font-weight:730}
+    .ecosystem{padding:120px 0;background:linear-gradient(135deg,#0d292c,#071518)}.eco-grid{display:grid;grid-template-columns:1fr 1fr;gap:90px;align-items:center}.orbit{aspect-ratio:1;position:relative;display:grid;place-items:center}.orbit:before,.orbit:after{content:"";position:absolute;border:1px solid rgba(72,224,190,.2);border-radius:50%}.orbit:before{inset:6%}.orbit:after{inset:22%}.core{width:145px;height:145px;border-radius:50%;background:var(--lime);color:var(--ink);display:grid;place-items:center;text-align:center;z-index:2;box-shadow:0 0 80px rgba(209,250,84,.18)}.core strong{font-size:2.3rem;letter-spacing:-.08em}.core small{display:block;font-size:.62rem;letter-spacing:.1em;text-transform:uppercase}.sat{position:absolute;width:150px;padding:14px;background:#102d30;border:1px solid var(--line);border-radius:13px;text-align:center;font-size:.72rem;z-index:3}.sat b{display:block;color:var(--teal);font-size:.82rem}.sat.one{top:5%;left:40%}.sat.two{right:-2%;top:43%}.sat.three{bottom:6%;left:37%}.sat.four{left:-2%;top:43%}.future-card{border:1px solid rgba(209,250,84,.24);background:rgba(209,250,84,.05);padding:18px;border-radius:16px;margin-top:28px}.future-card span{display:inline-block;color:var(--lime);font-size:.64rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800;margin-bottom:8px}.future-card h3{margin:0 0 8px;font-size:1.12rem}.future-card p{color:var(--muted);font-size:.84rem;margin:0}
+    .evidence{padding:120px 0}.evidence-top{display:grid;grid-template-columns:1fr 1fr;gap:90px;margin-bottom:65px}.principles{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}.principle{border-top:1px solid var(--line);padding:23px 8px 0}.principle .n{font-size:.7rem;color:var(--teal)}.principle h3{font-size:1.05rem;margin:34px 0 10px}.principle p{font-size:.8rem;color:var(--muted)}.status-board{margin-top:55px;border:1px solid var(--line);border-radius:20px;overflow:hidden}.status-row{display:grid;grid-template-columns:1.1fr 2fr .8fr;padding:17px 22px;border-bottom:1px solid var(--line);align-items:center;font-size:.8rem}.status-row:last-child{border:0}.status-row.head{font-size:.64rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);background:rgba(255,255,255,.025)}.status-row span:nth-child(2){color:var(--muted)}.badge{justify-self:start;padding:6px 10px;border-radius:99px;font-size:.64rem;font-weight:800}.badge.live{background:rgba(72,224,190,.12);color:var(--teal)}.badge.validate{background:rgba(255,173,102,.12);color:var(--orange)}.badge.roadmap{background:rgba(209,250,84,.11);color:var(--lime)}
+    .closing{padding:115px 0 45px;background:var(--lime);color:var(--ink)}.closing-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:60px;align-items:end}.closing h2{max-width:850px}.closing .lead{color:#33433f}.closing-actions{display:flex;flex-direction:column;gap:10px}.closing .button{justify-content:space-between;border-color:rgba(7,21,24,.18);background:rgba(255,255,255,.2)}.closing .button.dark{background:var(--ink);color:var(--paper);border-color:var(--ink)}footer{display:flex;justify-content:space-between;gap:20px;border-top:1px solid rgba(7,21,24,.18);margin-top:85px;padding-top:23px;font-size:.72rem;color:#40524d}
+    .reveal{opacity:0;transform:translateY(25px);transition:.7s ease}.reveal.visible{opacity:1;transform:none}
+    @@media(max-width:900px){.navlinks a:not(.nav-cta){display:none}.hero-grid,.story-grid,.eco-grid,.evidence-top,.closing-grid{grid-template-columns:1fr}.hero{padding-top:120px}.hero-grid{gap:46px}.console{transform:none}.band .wrap{grid-template-columns:1fr 1fr}.band-item:nth-child(2){border-right:1px solid var(--line)}.story-grid{gap:52px}.sticky{position:static}.platform-head{display:block}.modules{grid-template-columns:1fr}.module:nth-child(n){grid-column:auto}.flow-grid{grid-template-columns:1fr 1fr}.flow-step{border-bottom:1px solid #bfd3cc}.flow-step:nth-child(even){border-right:0}.principles{grid-template-columns:1fr}.orbit{max-width:520px;margin:auto}.status-row{grid-template-columns:1fr;gap:7px}.status-row.head{display:none}}
+    @@media(max-width:560px){.wrap{width:min(calc(100% - 26px),var(--max))}.hero h1{font-size:3.55rem}.hero-copy{font-size:1rem}.nav-cta{padding:9px 12px}.brand small{display:none}.proof{align-items:flex-start;flex-direction:column;gap:9px}.screen{padding:14px;min-height:auto}.kpis{grid-template-columns:1fr}.kpi:nth-child(n+2){display:none}.band .wrap,.flow-grid{grid-template-columns:1fr}.band-item,.band-item:nth-child(2){border-right:1px solid var(--line)}.leak{grid-template-columns:45px 1fr}.leak .tag{grid-column:2}.story,.platform,.ecosystem,.evidence{padding:88px 0}.orbit{transform:scale(.82);margin:-35px auto}.sat.two{right:-8%}.sat.four{left:-8%}.closing{padding-top:88px}footer{flex-direction:column}}
+    @@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.reveal{opacity:1;transform:none;transition:none}.bar{animation:none}.button:hover{transform:none}}
+  </style>
 </head>
 <body>
-    <a class="skip-link" href="#main">Skip to main content</a>
-    <header class="site-header">
-        <div class="shell nav" aria-label="Main navigation">
-            <a class="brand" href="/" aria-label="Ghaf Bi Analytix home">
-                <img src="~/images/ghaf-logo-primary-006884-2x.jpg" alt="" />
-                <span class="brand-copy"><strong>Ghaf Bi Analytix</strong><span>Business Intelligence</span></span>
-            </a>
-            <nav class="nav-links" aria-label="Landing page sections">
-                <a href="#capabilities">Capabilities</a>
-                <a href="#outcomes">Why Analytix</a>
-            </nav>
-            <div class="nav-actions">
-                <a class="button button-secondary" href="/Home/Dashboard">Explore dashboard</a>
-                <a class="button button-primary" href="/login">Sign in <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
-            </div>
+  <header>
+    <nav class="wrap" aria-label="Main navigation">
+      <a class="brand" href="#top" aria-label="BIX home"><span class="brand-mark">BIX</span><span>BIX<small>Powered by Ghaf</small></span></a>
+      <div class="navlinks"><a href="#problem">The gap</a><a href="#platform">Platform</a><a href="#ecosystem">Ecosystem</a><a href="#proof">Proof</a><a class="nav-cta" href="/login">Open BIX ↗</a></div>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <div class="eyebrow">Healthcare revenue intelligence</div>
+          <h1>See the leak.<br><em>Recover</em> the revenue.</h1>
+          <p class="hero-copy">BIX turns fragmented claims, remittance and denial data into clear priorities for finance leaders and RCM teams—so the next action is visible, owned and measurable.</p>
+          <div class="actions"><a class="button primary" href="#platform">Explore the platform <span class="arrow">↓</span></a><a class="button" href="#contact">Request a walkthrough <span class="arrow">↗</span></a></div>
+          <div class="proof"><span><i class="dot"></i> Built from UAE RCM operations</span><span>By Ghaf Business Services</span></div>
         </div>
-    </header>
+        <div class="console" aria-label="Illustrative BIX operating view">
+          <div class="console-top"><div class="window-dots"><i></i><i></i><i></i></div><span>Revenue command center</span><span class="live-pill">Illustrative view</span></div>
+          <div class="screen">
+            <div class="screen-head"><div><h3>Revenue pulse</h3><p>Priorities across the claim lifecycle</p></div><span class="range">Last 90 days</span></div>
+            <div class="kpis"><div class="kpi"><label>NET COLLECTION</label><strong>92.4%</strong><small>↑ visibility</small></div><div class="kpi"><label>AT-RISK VALUE</label><strong>AED 184K</strong><small>23 actions</small></div><div class="kpi"><label>FIRST-PASS</label><strong>88.7%</strong><small>rules monitored</small></div></div>
+            <div class="chart-card"><div class="chart-title"><span>Recovered vs. at risk</span><span>Weekly</span></div><div class="bars"><div class="bar" style="height:42%;--d:.1s"></div><div class="bar" style="height:58%;--d:.15s"></div><div class="bar" style="height:51%;--d:.2s"></div><div class="bar" style="height:74%;--d:.25s"></div><div class="bar" style="height:64%;--d:.3s"></div><div class="bar" style="height:82%;--d:.35s"></div><div class="bar" style="height:92%;--d:.4s"></div><div class="bar" style="height:78%;--d:.45s"></div></div></div>
+            <div class="issue-row"><strong>Action queue</strong><span>Owner</span><span>Exposure</span></div><div class="issue-row"><strong>Unmapped remittance lines</strong><span>Reconciliation</span><strong class="risk">High</strong></div><div class="issue-row"><strong>Authorization mismatch</strong><span>Client ops</span><strong>Medium</strong></div><div class="issue-row"><strong>Resubmission window</strong><span>Denials</span><strong class="risk">48h</strong></div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <main id="main">
-        <section class="hero" aria-labelledby="hero-title">
-            <div class="shell hero-grid">
-                <div class="reveal">
-                    <p class="eyebrow">Built for UAE healthcare</p>
-                    <h1 id="hero-title">Revenue intelligence, made actionable.</h1>
-                    <p class="hero-lede">Bring claims, remittance, denials and facility performance into one clear operating view—so teams can move from data to decisions faster.</p>
-                    <div class="hero-actions">
-                        <a class="button button-primary" href="/login">Sign in to Analytix <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
-                        <a class="button button-secondary" href="/Home/Dashboard"><i class="fas fa-chart-line" aria-hidden="true"></i> Explore dashboard</a>
-                    </div>
-                    <ul class="trust-line" aria-label="Platform highlights">
-                        <li><i class="fas fa-shield-halved" aria-hidden="true"></i> Role-based access</li>
-                        <li><i class="fas fa-cloud-arrow-down" aria-hidden="true"></i> DHA &amp; RHA workflows</li>
-                        <li><i class="fas fa-building" aria-hidden="true"></i> Multi-facility visibility</li>
-                    </ul>
-                </div>
+    <div class="band"><div class="wrap"><div class="band-item"><strong>One operating view</strong><span>Across payer, receiver, clinician and branch</span></div><div class="band-item"><strong>Claim-to-cash context</strong><span>Not another disconnected report</span></div><div class="band-item"><strong>Action before insight</strong><span>Every signal leads to an owner</span></div><div class="band-item"><strong>Human-accountable AI</strong><span>Support decisions, retain control</span></div></div></div>
 
-                <aside class="insight-card reveal" id="outcomes" aria-label="Analytics dashboard preview">
-                    <div class="insight-top"><span>Claims performance</span><span class="live">Live view</span></div>
-                    <h2>AED 21.47M</h2>
-                    <p>Net submitted value across the selected network</p>
-                    <div class="chart" aria-hidden="true">
-                        <span style="--h:43%"></span><span style="--h:56%"></span><span style="--h:68%"></span><span style="--h:59%"></span><span style="--h:78%"></span><span style="--h:92%"></span><span style="--h:84%"></span><span style="--h:100%"></span>
-                    </div>
-                    <div class="card-footer">
-                        <div class="mini-stat"><strong>90.4%</strong><span>Match rate</span></div>
-                        <div class="mini-stat"><strong>195.8K</strong><span>Submissions</span></div>
-                        <div class="mini-stat"><strong>13</strong><span>Facilities</span></div>
-                    </div>
-                </aside>
-            </div>
-        </section>
+    <section class="story" id="problem">
+      <div class="wrap story-grid">
+        <div class="sticky reveal"><div class="eyebrow">The operating gap</div><h2>Revenue does not disappear in one place.</h2><p class="lead">It leaks between systems, teams and decisions. Traditional reports explain what happened. BIX is being built to show what requires action now.</p></div>
+        <div class="leak-list reveal">
+          <article class="leak"><span class="leak-num">01</span><div><h3>Fragmented visibility</h3><p>Submission portals, remittance files and internal trackers rarely create one reliable version of revenue truth.</p></div><span class="tag">Blind spots</span></article>
+          <article class="leak"><span class="leak-num">02</span><div><h3>Late intervention</h3><p>Denials become visible after avoidable errors have already consumed time, cash flow and resubmission windows.</p></div><span class="tag">Aging</span></article>
+          <article class="leak"><span class="leak-num">03</span><div><h3>Reports without ownership</h3><p>A dashboard can show the problem and still fail the team if nobody knows the next action, dependency or deadline.</p></div><span class="tag">No action</span></article>
+          <article class="leak"><span class="leak-num">04</span><div><h3>Generic automation</h3><p>Healthcare RCM needs payer logic, coding context and a human audit trail—not black-box recommendations.</p></div><span class="tag">Control risk</span></article>
+        </div>
+      </div>
+    </section>
 
-        <section class="value-section" id="capabilities" aria-labelledby="capabilities-title">
-            <div class="shell">
-                <div class="section-heading">
-                    <p class="eyebrow">One operational picture</p>
-                    <h2 id="capabilities-title">See the full revenue cycle without the reporting drag.</h2>
-                    <p>Analytix connects daily RCM signals into focused workflows for finance, operations and clinical leadership.</p>
-                </div>
-                <div class="feature-grid">
-                    <article class="feature"><div class="feature-icon"><i class="fas fa-route" aria-hidden="true"></i></div><h3>Follow every claim</h3><p>Track submissions, resubmissions, remittance and denials through one consistent lifecycle.</p></article>
-                    <article class="feature"><div class="feature-icon"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></div><h3>Act on exceptions</h3><p>Surface unmatched records, denial patterns and operational risks before they become revenue leakage.</p></article>
-                    <article class="feature"><div class="feature-icon"><i class="fas fa-chart-column" aria-hidden="true"></i></div><h3>Report with confidence</h3><p>Give decision-makers validated, report-ready metrics across facilities, payers and departments.</p></article>
-                </div>
-            </div>
-        </section>
+    <section class="platform" id="platform">
+      <div class="wrap">
+        <div class="platform-head reveal"><div><div class="eyebrow">The BIX platform</div><h2>From data exhaust<br>to operating intelligence.</h2></div><p class="lead">A modular command layer for executives, RCM managers and operational teams. Capabilities are labeled honestly as live, under validation or planned.</p></div>
+        <div class="modules reveal">
+          <article class="module"><span class="module-status">Live foundation</span><div class="module-icon">01</div><h3>Executive command center</h3><p>Surface the revenue position, operational pressure points and priority actions across the organization.</p></article>
+          <article class="module"><span class="module-status">Validation</span><div class="module-icon">02</div><h3>Remittance intelligence</h3><p>Reconcile billed, paid, patient share, contractual adjustments and true denials with traceable logic.</p></article>
+          <article class="module"><span class="module-status">Planned</span><div class="module-icon">03</div><h3>Denial intelligence</h3><p>Cluster root causes, monitor aging and prioritize recoverable value before deadlines close.</p></article>
+          <article class="module"><span class="module-status">In progress</span><div class="module-icon">04</div><h3>AI analysis layer</h3><p>Provider-neutral architecture designed for controlled, auditable analysis with local-model options.</p></article>
+          <article class="module"><span class="module-status">Planned product</span><div class="module-icon">05</div><h3>BIX Verify</h3><p>Proposed pre-submission claim scrubbing: readiness checks, rule validation and explainable issue flags.</p></article>
+        </div>
+        <div class="flow reveal"><div class="flow-grid"><div class="flow-step"><b>01 · INGEST</b><span>Claims & remittance</span></div><div class="flow-step"><b>02 · RECONCILE</b><span>Payment truth</span></div><div class="flow-step"><b>03 · DETECT</b><span>Risk & leakage</span></div><div class="flow-step"><b>04 · ASSIGN</b><span>Owner & deadline</span></div><div class="flow-step"><b>05 · LEARN</b><span>Prevent recurrence</span></div></div></div>
+      </div>
+    </section>
 
-        <section class="shell cta-band" aria-labelledby="cta-title">
-            <div><h2 id="cta-title">Turn today’s RCM data into the next action.</h2><p>Open your workspace to review live claims and facility performance.</p></div>
-            <a class="button" href="/login">Continue to sign in <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
-        </section>
-    </main>
+    <section class="ecosystem" id="ecosystem">
+      <div class="wrap eco-grid">
+        <div class="orbit reveal" aria-label="BIX product ecosystem"><div class="core"><div><strong>BIX</strong><small>Intelligence core</small></div></div><div class="sat one"><b>Command</b>Executive view</div><div class="sat two"><b>Recover</b>Denial action</div><div class="sat three"><b>Verify</b>Claim scrubbing</div><div class="sat four"><b>Reconcile</b>Remittance truth</div></div>
+        <div class="reveal"><div class="eyebrow">Product family</div><h2>One intelligence core. Focused tools around it.</h2><p class="lead">BIX should remain the master platform—not become a crowded list of disconnected features. Each product solves a distinct job while sharing the same revenue context.</p><div class="future-card"><span>Proposed extension</span><h3>BIX Verify</h3><p>A dedicated claim-scrubbing tool positioned as the quality gate before submission. The name and scope are proposed, not presented as launched.</p></div></div>
+      </div>
+    </section>
 
-    <footer><div class="shell footer-row"><img src="~/images/ghaf-logo-soft-78C2C2.png" alt="Ghaf Bi Solutions" /><span>&copy; 2026 Ghaf Bi Solutions. All rights reserved.</span></div></footer>
+    <section class="evidence" id="proof">
+      <div class="wrap">
+        <div class="evidence-top reveal"><div><div class="eyebrow">Why BIX</div><h2>Built closer to the work.</h2></div><p class="lead">BIX is shaped by Ghaf’s hands-on experience in UAE healthcare revenue-cycle operations—where the real problem is not producing more data, but turning it into accountable decisions.</p></div>
+        <div class="principles reveal"><article class="principle"><span class="n">01 / OPERATIONAL</span><h3>Designed around action</h3><p>Priorities, dependencies and deadlines are the product—not decorative analytics.</p></article><article class="principle"><span class="n">02 / EXPLAINABLE</span><h3>Traceable by default</h3><p>Recommendations should connect back to source data, rules and accountable review.</p></article><article class="principle"><span class="n">03 / PRACTICAL</span><h3>Made for the UAE context</h3><p>Built with local claim workflows, payer complexity and clinical operations in mind.</p></article></div>
+        <div class="status-board reveal"><div class="status-row head"><span>Capability</span><span>Current evidence position</span><span>Status</span></div><div class="status-row"><strong>Platform access</strong><span>Live BIX environment available</span><span class="badge live">Live</span></div><div class="status-row"><strong>Remittance reconciliation</strong><span>Field mapping and accuracy testing required before performance claims</span><span class="badge validate">Validation</span></div><div class="status-row"><strong>AI provider layer</strong><span>Provider-neutral / local-model integration being developed</span><span class="badge validate">In progress</span></div><div class="status-row"><strong>BIX Verify</strong><span>Claim-scrubbing product concept and naming direction</span><span class="badge roadmap">Planned</span></div></div>
+      </div>
+    </section>
+
+    <section class="closing" id="contact">
+      <div class="wrap"><div class="closing-grid"><div><div class="eyebrow" style="color:#29423c">The next move</div><h2>Turn every revenue signal into the right next action.</h2><p class="lead">Explore the current BIX experience or start a focused walkthrough around your organization’s reporting, remittance and denial priorities.</p></div><div class="closing-actions"><a class="button dark" href="/login"><span>Open the live BIX app</span><span>↗</span></a><a class="button" href="mailto:info@ghafservices.com?subject=BIX%20Product%20Walkthrough"><span>Request a walkthrough</span><span>→</span></a></div></div><footer><span>© 2026 Ghaf Business Services · BIX</span><span>Revenue intelligence, made actionable.</span></footer></div>
+    </section>
+  </main>
+  <script>
+    const observer=new IntersectionObserver((entries)=>entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')}),{threshold:.12});
+    document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
+  </script>
 </body>
 </html>
