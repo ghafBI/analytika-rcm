@@ -4329,7 +4329,7 @@ html[data-theme="dark"] .btn-outline-success {
 
 html[data-theme="dark"] .btn-outline-success:hover {
   background: var(--dt-accent) !important;
-  color: #000 !important;
+  color: #fff !important;
 }
 
 html[data-theme="dark"] .btn-outline-info {

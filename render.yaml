@@ -13,9 +13,9 @@ services:
       - key: DB_DIR
         value: /app/data
       - key: StartupMaintenance__RunDatabaseSetupOnStartup
-        value: false
+        value: true
       - key: StartupMaintenance__CreateIndexesOnStartup
-        value: false
+        value: true
       - key: StartupMaintenance__SeedDataOnStartup
         value: false
       - key: BackgroundJobs__HangfireServerEnabled
