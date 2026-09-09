@@ -637,46 +637,24 @@ public class ReportService : IReportService
         ws.Range(1, 1, 6, lastColumn).Style.Border.BottomBorderColor = XLColor.FromHtml(GhafBorder);
 
         ws.Range(1, 1, 6, 1).Style.Fill.BackgroundColor = XLColor.FromHtml(GhafTeal);
-        ws.Range(1, 2, 6, 6).Merge();
-        ws.Range(1, 7, 1, lastColumn).Merge();
-        ws.Range(2, 7, 2, lastColumn).Merge();
-        ws.Range(3, 7, 3, lastColumn).Merge();
+        ws.Range(1, 2, 1, lastColumn).Merge();
+        ws.Range(2, 2, 2, lastColumn).Merge();
+        ws.Range(3, 2, 3, lastColumn).Merge();
 
-        var logoPath = ResolveReportLogoPath();
-        if (!string.IsNullOrWhiteSpace(logoPath))
-        {
-            try
-            {
-                var picture = ws.AddPicture(logoPath)
-                    .MoveTo(ws.Cell(1, 2));
-                picture.Width = 92;
-                picture.Height = 120;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not add Ghaf report logo to workbook.");
-                WriteTextFallbackLogo(ws);
-            }
-        }
-        else
-        {
-            WriteTextFallbackLogo(ws);
-        }
+        ws.Cell(1, 2).Value = "GHAF BUSINESS SERVICES";
+        ws.Cell(1, 2).Style.Font.FontColor = XLColor.FromHtml(GhafTeal);
+        ws.Cell(1, 2).Style.Font.Bold = true;
+        ws.Cell(1, 2).Style.Font.FontSize = 10;
+        ws.Cell(1, 2).Style.Alignment.Vertical = XLAlignmentVerticalValues.Bottom;
 
-        ws.Cell(1, 7).Value = "GHAF BUSINESS SERVICES";
-        ws.Cell(1, 7).Style.Font.FontColor = XLColor.FromHtml(GhafTeal);
-        ws.Cell(1, 7).Style.Font.Bold = true;
-        ws.Cell(1, 7).Style.Font.FontSize = 10;
-        ws.Cell(1, 7).Style.Alignment.Vertical = XLAlignmentVerticalValues.Bottom;
+        ws.Cell(2, 2).Value = title;
+        ws.Cell(2, 2).Style.Font.FontColor = XLColor.FromHtml(GhafInk);
+        ws.Cell(2, 2).Style.Font.Bold = true;
+        ws.Cell(2, 2).Style.Font.FontSize = 22;
 
-        ws.Cell(2, 7).Value = title;
-        ws.Cell(2, 7).Style.Font.FontColor = XLColor.FromHtml(GhafInk);
-        ws.Cell(2, 7).Style.Font.Bold = true;
-        ws.Cell(2, 7).Style.Font.FontSize = 22;
-
-        ws.Cell(3, 7).Value = "Healthcare revenue cycle intelligence";
-        ws.Cell(3, 7).Style.Font.FontColor = XLColor.FromHtml(GhafPrimary);
-        ws.Cell(3, 7).Style.Font.FontSize = 11;
+        ws.Cell(3, 2).Value = "Healthcare revenue cycle intelligence";
+        ws.Cell(3, 2).Style.Font.FontColor = XLColor.FromHtml(GhafPrimary);
+        ws.Cell(3, 2).Style.Font.FontSize = 11;
 
         AddReportMeta(ws, 5, 7, "Facility", facility);
         AddReportMeta(ws, 5, 11, "Date Range", period);
@@ -751,35 +729,6 @@ public class ReportService : IReportService
         ws.Column(37).Width = 20;
         ws.Column(38).Width = 32;
         ws.Column(41).Width = 20;
-    }
-
-    private string? ResolveReportLogoPath()
-    {
-        var candidates = new[]
-        {
-            Path.Combine(_env.WebRootPath, "images", "ghaf-logo-primary-006884-2x.jpg"),
-            Path.Combine(_env.WebRootPath, "images", "ghaf-logo-primary-006884.jpg"),
-            Path.Combine(_env.WebRootPath, "images", "ghaf-logo-primary-006884.png"),
-            Path.Combine(_env.WebRootPath, "images", "ghaf-logo-soft-78C2C2.png"),
-            Path.Combine(_env.WebRootPath, "images", "ghaf-report-logo-teal.png"),
-            "/Users/jawaa/Downloads/Ghaf Business Services Website/src/imports/ghaf-logo-exact-teal.png",
-            "/Users/jawaa/Downloads/Ghaf Business Services Website/src/imports/ghaf-logo-lockup-exact-teal.png",
-            "/Users/jawaa/Library/CloudStorage/OneDrive-GhafBusinessServices/Ghaf Docs/Ghaf Logo !/ghaf logo/Working file/resized/ghaf-logo-max-2048.jpg",
-            "/Users/jawaa/Downloads/Ghaf Business Services Website/src/imports/ghaf-logo.png"
-        };
-
-        return candidates.FirstOrDefault(System.IO.File.Exists);
-    }
-
-    private static void WriteTextFallbackLogo(IXLWorksheet ws)
-    {
-        ws.Cell(2, 2).Value = "GHAF";
-        ws.Cell(2, 2).Style.Font.Bold = true;
-        ws.Cell(2, 2).Style.Font.FontSize = 20;
-        ws.Cell(2, 2).Style.Font.FontColor = XLColor.FromHtml(GhafTeal);
-        ws.Cell(3, 2).Value = "BUSINESS SERVICES";
-        ws.Cell(3, 2).Style.Font.FontSize = 8;
-        ws.Cell(3, 2).Style.Font.FontColor = XLColor.FromHtml(GhafPrimary);
     }
 
     private static string GetReportTitle(string reportType) => reportType switch
