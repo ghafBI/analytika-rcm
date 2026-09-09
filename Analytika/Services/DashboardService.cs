@@ -481,10 +481,25 @@ public class DashboardService : IDashboardService
         };
 
         // ── Aggregate KPI metrics from real data ──
-        var totalClaims = await tabQuery.CountAsync();
-        var netTotal = await tabQuery.SumAsync(r => r.NetAmount);
-        var grossTotal = await tabQuery.SumAsync(r => r.GrossAmount);
-        var paidTotal = await tabQuery.SumAsync(r => r.PaidAmount);
+        // Keep the cold path to one SQLite scan. The previous implementation
+        // issued separate COUNT/SUM queries (and repeated matched counts),
+        // which made the request exceed the reverse-proxy timeout on large DBs.
+        var kpi = await tabQuery
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                TotalClaims = g.Count(),
+                NetTotal = g.Sum(r => r.NetAmount),
+                GrossTotal = g.Sum(r => r.GrossAmount),
+                PaidTotal = g.Sum(r => r.PaidAmount),
+                Matched = g.Count(r => r.IsMatched)
+            })
+            .FirstOrDefaultAsync();
+
+        var totalClaims = kpi?.TotalClaims ?? 0;
+        var netTotal = kpi?.NetTotal ?? 0m;
+        var grossTotal = kpi?.GrossTotal ?? 0m;
+        var paidTotal = kpi?.PaidTotal ?? 0m;
 
         // Compute prior-period comparison (last 30d vs prev 30d)
         var now = DateTime.UtcNow;
@@ -531,8 +546,8 @@ public class DashboardService : IDashboardService
                 new DashboardMetric
                 {
                     Label = "Matched",
-                    Value = $"{await tabQuery.CountAsync(r => r.IsMatched):N0}",
-                    Delta = totalClaims > 0 ? $"{(await tabQuery.CountAsync(r => r.IsMatched) * 100.0 / totalClaims):F0}%" : "",
+                    Value = $"{kpi?.Matched ?? 0:N0}",
+                    Delta = totalClaims > 0 ? $"{((kpi?.Matched ?? 0) * 100.0 / totalClaims):F0}%" : "",
                     Icon = "fa-link",
                     Tone = "blue"
                 }
