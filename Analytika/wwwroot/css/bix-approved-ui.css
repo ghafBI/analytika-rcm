@@ -1,0 +1,43 @@
+/* Shared workspace styling only. Landing/login keep their independent design. */
+:root {
+    --bix-navy: #011c40;
+    --bix-line: #dce4ed;
+    --bix-wash: #f3f6fa;
+}
+html:not([data-theme="dark"]) .analytika-navbar {
+    background: #fff !important;
+    border-bottom: 1px solid var(--bix-line);
+}
+.analytika-navbar .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+}
+.analytika-navbar .nav-link > i { flex-shrink: 0; }
+.analytika-navbar a:focus-visible {
+    outline: 3px solid #007f8f;
+    outline-offset: 3px;
+}
+html:not([data-theme="dark"]) .dash-section .dashboard-hero {
+    background: #fff;
+    border-color: var(--bix-line);
+}
+html:not([data-theme="dark"]) .page-wrapper { background: var(--bix-wash); }
+html:not([data-theme="dark"]) .page-wrapper .filter-card,
+html:not([data-theme="dark"]) .page-wrapper .table-card {
+    box-shadow: 0 12px 32px #011c4010;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+html:not([data-theme="dark"]) .page-wrapper .filter-card .card-header {
+    background: var(--bix-navy);
+    color: #fff !important;
+}
+html:not([data-theme="dark"]) .page-wrapper .filter-card .card-header * {
+    color: inherit !important;
+}
+html:not([data-theme="dark"]) .page-wrapper .btn-submit-report {
+    background: var(--bix-navy);
+    border-color: var(--bix-navy);
+    color: #fff !important;
+}

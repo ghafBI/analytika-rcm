@@ -234,11 +234,7 @@ public class XmlParsingService
 
             if (pendingRows >= 1000 || processed % 50 == 0 || processed == total)
             {
-                await _db.SaveChangesAsync(ct);
-                // Detach saved entities so subsequent SaveChangesAsync calls don't
-                // re-run change detection over the whole accumulated set (O(n^2))
-                // and don't pin every parsed row in memory for the entire run.
-                _db.ChangeTracker.Clear();
+                await SaveParsedBatchAsync(ct);
                 pendingRows = 0;
 
                 if (onProgress != null)
@@ -247,7 +243,7 @@ public class XmlParsingService
         }
 
         if (pendingRows > 0)
-            await _db.SaveChangesAsync(ct);
+            await SaveParsedBatchAsync(ct);
 
         var match = await MatchParsedRecordsAsync(facilityId, ct);
         result.MatchedClaimRefs = match.MatchedClaimRefs;
@@ -296,7 +292,7 @@ public class XmlParsingService
         if (records.Count > 0)
         {
             _db.XmlParsedRecords.AddRange(records);
-            await _db.SaveChangesAsync(ct);
+            await SaveParsedBatchAsync(ct);
         }
 
         var match = await MatchParsedRecordsAsync(tx.FacilityId, ct);
@@ -313,6 +309,19 @@ public class XmlParsingService
             UnmatchedSubmissions = match.UnmatchedSubmissions,
             UnmatchedRemittances = match.UnmatchedRemittances
         };
+    }
+
+    private async Task SaveParsedBatchAsync(CancellationToken ct)
+    {
+        var parsed = _db.ChangeTracker.Entries<XmlParsedRecord>()
+            .Where(entry => entry.State == EntityState.Added).Select(entry => entry.Entity).ToList();
+        await _db.SaveChangesAsync(ct);
+        if (parsed.Count > 0)
+            await new ReportLookupSyncService(_db).UpsertAsync(parsed, ct);
+        // Detach saved entities so subsequent SaveChangesAsync calls in the parse
+        // loop don't re-run change detection over the whole accumulated set (O(n^2))
+        // and don't pin every parsed row in memory for the entire run.
+        _db.ChangeTracker.Clear();
     }
 
     public async Task<XmlParsingMatchResult> MatchParsedRecordsAsync(int? facilityId = null, CancellationToken ct = default)

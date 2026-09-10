@@ -264,16 +264,6 @@ small,
   box-shadow: 0 10px 30px rgba(8,20,35,0.07), inset 0 -1px 0 rgba(255,255,255,0.78);
 }
 
-/* The legacy Bootstrap navbar wrapper only groups the fixed .sidebar and
-   .topbar now. Its backdrop-filter established a containing block for those
-   fixed children (anchoring them to the wrapper instead of the viewport) and
-   its .container-fluid { height:56px; overflow:hidden } clipped the sidebar to
-   its header. Collapse the wrapper out of the layout with display:contents so
-   .sidebar/.topbar anchor to the viewport; descendant style selectors
-   (.analytika-navbar .nav-link, …) still match. */
-.analytika-navbar,
-.analytika-navbar > .container-fluid { display: contents !important; }
-
 .analytika-navbar .container-fluid {
   height: 56px;
   align-items: stretch;
@@ -2752,7 +2742,7 @@ html[data-theme="dark"] .table-responsive {
   background-attachment: local, local;
 }
 
-/* ── Server-rendered navbar (sidebar + topbar) — restored ──── */
+/* ── Primary navbar restored (was hidden by a leftover "legacy navbar" rule, which left the app with no visible nav) ── */
 
 /* ================================================================
    Glass Design System v7 — Light & Dark Theme Polish
@@ -3954,7 +3944,7 @@ html[data-theme="dark"] body {
 }
 
 /* ── Page wrapper / main content area ──────────────────────────── */
-/* ── Server-rendered navbar (sidebar + topbar) — restored ──── */
+/* ── Primary navbar restored (was hidden by a leftover "legacy navbar" rule, which left the app with no visible nav) ── */
 
 /* ================================================================
    Glass Design System v7 — Light & Dark Theme Polish
@@ -4299,7 +4289,7 @@ html[data-theme="dark"] .btn-submit-report,
 html[data-theme="dark"] .btn-download {
   background: var(--dt-accent) !important;
   border-color: var(--dt-accent) !important;
-  color: #000 !important;
+  color: #fff !important;
   font-weight: 700 !important;
   box-shadow: var(--dt-accent-glow) !important;
 }
@@ -4309,7 +4299,7 @@ html[data-theme="dark"] .btn-emerald:hover,
 html[data-theme="dark"] .btn-teal:hover {
   background: #00e577 !important;
   box-shadow: 0 0 28px rgba(0,255,133,0.40), 0 0 56px rgba(0,255,133,0.16) !important;
-  color: #000 !important;
+  color: #fff !important;
 }
 
 html[data-theme="dark"] .btn-outline-secondary {
@@ -4342,7 +4332,7 @@ html[data-theme="dark"] .btn-outline-success {
 
 html[data-theme="dark"] .btn-outline-success:hover {
   background: var(--dt-accent) !important;
-  color: #000 !important;
+  color: #fff !important;
 }
 
 html[data-theme="dark"] .btn-outline-info {
@@ -5443,7 +5433,7 @@ html[data-theme="dark"] .btn-submit-report,
 html[data-theme="dark"] .btn-download {
   background: var(--dt-accent) !important;
   border-color: var(--dt-accent) !important;
-  color: #000 !important;
+  color: #fff !important;
   font-weight: 700 !important;
   box-shadow: var(--dt-accent-glow) !important;
 }
@@ -6031,4 +6021,3 @@ html[data-theme="dark"] .badge-sky {
 
 /* ── Word-break utility ───────────────────────────────────────── */
 .break-all { word-break: break-all; }
-

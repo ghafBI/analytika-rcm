@@ -1,0 +1,7 @@
+@{ ViewData["Title"] = "RCM Dashboard busy"; }
+<section class="container py-5" role="status">
+    <h1>RCM Dashboard is taking longer than expected</h1>
+    <p>The selected records are being aggregated in the background. Please retry shortly. Completed figures show their refresh time and are cached for up to five minutes.</p>
+    <button type="button" class="btn btn-primary" onclick="window.location.reload()">Retry dashboard</button>
+    <a asp-controller="Home" asp-action="Dashboard" class="btn btn-outline-secondary">Back to dashboard</a>
+</section>

@@ -14,11 +14,13 @@ public class SyncHealthCheck : IHealthCheck
 {
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
+    private readonly ILogger<SyncHealthCheck>? _logger;
 
-    public SyncHealthCheck(AppDbContext db, IConfiguration config)
+    public SyncHealthCheck(AppDbContext db, IConfiguration config, ILogger<SyncHealthCheck>? logger = null)
     {
         _db = db;
         _config = config;
+        _logger = logger;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default)
@@ -51,16 +53,9 @@ public class SyncHealthCheck : IHealthCheck
                 })
                 .ToListAsync(ct);
 
-            var pendingDownloads = await _db.PortalTransactions
-                .CountAsync(t => !t.FileDownloaded, ct);
-
-            var parsedCount = await _db.XmlParsedRecords.CountAsync(ct);
-
             var data = new Dictionary<string, object>
             {
-                ["activeFacilities"] = facilityStats.Count,
-                ["pendingDownloads"] = pendingDownloads,
-                ["parsedRecords"] = parsedCount
+                ["activeFacilities"] = facilityStats.Count
             };
 
             var degradedFacilities = new List<string>();
@@ -92,12 +87,17 @@ public class SyncHealthCheck : IHealthCheck
                     data: data);
 
             return HealthCheckResult.Healthy(
-                $"All {facilityStats.Count} facilities synced within {staleAfterHours}h. {pendingDownloads} pending downloads, {parsedCount:N0} parsed records.",
+                $"All {facilityStats.Count} facilities synced within {staleAfterHours}h.",
                 data: data);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return HealthCheckResult.Degraded("Portal synchronization check timed out or was cancelled.");
         }
         catch (Exception ex)
         {
-            return HealthCheckResult.Healthy($"Sync status unavailable: {ex.Message}");
+            _logger?.LogWarning(ex, "Portal synchronization readiness check failed.");
+            return HealthCheckResult.Degraded("Portal synchronization status unavailable. Check database connectivity and server logs.");
         }
     }
 }

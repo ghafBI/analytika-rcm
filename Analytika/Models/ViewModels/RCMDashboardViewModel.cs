@@ -10,6 +10,11 @@ public class RCMDashboardViewModel
     public List<DashboardTrendPoint> Trend { get; set; } = new();
     public List<DashboardBreakdownItem> Breakdown { get; set; } = new();
     public List<DashboardInsight> Insights { get; set; } = new();
+    public List<RcmLifecycleStage> Lifecycle { get; set; } = new();
+    public int UnmatchedRecords { get; set; }
+    public decimal UnmatchedAmount { get; set; }
+    public double ReconciliationRate { get; set; }
+    public List<RcmUnmatchedRow> UnmatchedWorklist { get; set; } = new();
     public string Summary { get; set; } = string.Empty;
     public DateTime RefreshedAt { get; set; } = DateTime.Now;
     public RcmDashboardFilters Filters { get; set; } = new();
@@ -18,20 +23,39 @@ public class RCMDashboardViewModel
     public List<DashboardFilterOption> PayerOptions { get; set; } = new();
     public List<DashboardFilterOption> EncounterTypeOptions { get; set; } = new();
     public bool HasActiveFilters =>
-        Filters.FacilityId.HasValue ||
-        !string.IsNullOrWhiteSpace(Filters.Receiver) ||
-        !string.IsNullOrWhiteSpace(Filters.Payer) ||
-        !string.IsNullOrWhiteSpace(Filters.EncounterType) ||
+        Filters.FacilityIds.Count > 0 ||
+        Filters.Receivers.Count > 0 ||
+        Filters.Payers.Count > 0 ||
+        Filters.EncounterTypes.Count > 0 ||
         Filters.DateFrom.HasValue ||
         Filters.DateTo.HasValue;
 }
 
+public class RcmUnmatchedRow
+{
+    public string RecordKind { get; set; } = string.Empty;
+    public string ClaimId { get; set; } = string.Empty;
+    public string ServiceDate { get; set; } = string.Empty;
+    public string Payer { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string Issue { get; set; } = string.Empty;
+}
+
+public class RcmLifecycleStage
+{
+    public string Label { get; set; } = string.Empty;
+    public int Count { get; set; }
+    public decimal Amount { get; set; }
+    public string Icon { get; set; } = "fa-circle";
+    public string Tone { get; set; } = "teal";
+}
+
 public class RcmDashboardFilters
 {
-    public int? FacilityId { get; set; }
-    public string? Receiver { get; set; }
-    public string? Payer { get; set; }
-    public string? EncounterType { get; set; }
+    public List<int> FacilityIds { get; set; } = new();
+    public List<string> Receivers { get; set; } = new();
+    public List<string> Payers { get; set; } = new();
+    public List<string> EncounterTypes { get; set; } = new();
     public DateOnly? DateFrom { get; set; }
     public DateOnly? DateTo { get; set; }
 }
@@ -85,12 +109,23 @@ public class FacilityStatusViewModel
     public int TotalClaimCount { get; set; }
     public int TotalFiles { get; set; }
     public string? LastSyncTime { get; set; }
+
+    /// <summary>
+    /// True when this model is a placeholder returned while the aggregation is still
+    /// running (cold cache after a restart), rather than a finished result. Without it
+    /// the view cannot tell "still loading" from "genuinely no facilities" and showed
+    /// "No active facilities found. Add credentials to get started." to users who had
+    /// 12 working facilities — a false statement prescribing a wrong action.
+    /// </summary>
+    public bool IsBuilding { get; set; }
 }
 
 public class FacilityStatusRow
 {
     public int FacilityId { get; set; }
     public string FacilityName { get; set; } = "";
+    public string? FullName { get; set; }        // official DHPO license name
+    public string? LicenseCode { get; set; }     // DHA-F-xxxxx
     public bool HasCredential { get; set; }   // any active credential
     public string? Portal { get; set; }   // DHA / RHA / both
     public string? LastSyncTime { get; set; }
@@ -100,6 +135,7 @@ public class FacilityStatusRow
     public int FileCount { get; set; }
     public int DownloadedFilesCount { get; set; }  // files where FileDownloaded = true
     public int PendingFilesCount { get; set; }  // files where FileDownloaded = false
+    public int ParsedFilesCount { get; set; }  // transactions parsed into XmlParsedRecords (report-ready)
     public int TotalFilesWithStatus => DownloadedFilesCount + PendingFilesCount;
 
     public FacilityConnectionStatus Status

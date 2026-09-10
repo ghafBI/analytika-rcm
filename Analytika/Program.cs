@@ -4,10 +4,13 @@ using Analytika.Services;
 using Hangfire;
 using Hangfire.Dashboard;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 using System.Diagnostics;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,9 +23,11 @@ builder.Host.UseWindowsService();
 // writable folder before anything reads it below.
 var isDesktop = Environment.GetEnvironmentVariable("BIX_DESKTOP") == "1"
     || args.Contains("--desktop");
-if (isDesktop && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DB_DIR")))
+var isReportWorker = args.Contains("--report-worker", StringComparer.OrdinalIgnoreCase);
+var isDemo = Environment.GetEnvironmentVariable("BIX_DEMO") == "1";
+if ((isDesktop || isDemo) && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DB_DIR")))
     Environment.SetEnvironmentVariable("DB_DIR",
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Bix"));
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), isDemo ? "BixDemo" : "Bix"));
 
 // Serilog: reads sinks/levels from the "Serilog" section of appsettings.
 builder.Services.AddSerilog((services, config) => config
@@ -61,6 +66,24 @@ var dataDir = Environment.GetEnvironmentVariable("DB_DIR")
 Directory.CreateDirectory(dataDir);
 var dbPath = Path.Combine(dataDir, "analytika.db");
 
+// Explicit detached lookup repair exits before migrations, pending DB replacement,
+// service registration, web hosting, or background job startup.
+if (args.Contains("--repair-report-lookups", StringComparer.OrdinalIgnoreCase))
+{
+    if (DatabaseConfig.GetProvider(builder.Configuration) == DatabaseConfig.Postgres)
+    {
+        Console.WriteLine("Lookup repair command currently supports existing SQLite deployments only.");
+        Environment.ExitCode = 2;
+        return;
+    }
+    using var repairCancellation = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, eventArgs) => { eventArgs.Cancel = true; repairCancellation.Cancel(); };
+    Environment.ExitCode = await ReportLookupRepairCommand.RunAsync(dbPath, repairCancellation.Token,
+        builder.Configuration.GetValue("LookupRepair:PageSize", 500),
+        builder.Configuration.GetValue("LookupRepair:DelayMs", 250));
+    return;
+}
+
 // If a pending DB was uploaded via the migration endpoint, swap it in now (before EF opens the file)
 var pendingDb = dbPath + ".pending";
 if (System.IO.File.Exists(pendingDb))
@@ -95,6 +118,11 @@ if (isDesktop
     && string.IsNullOrEmpty(port)
     && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
     builder.WebHost.UseUrls("http://localhost:5097");
+
+// Demo mode is deliberately loopback-only. It uses an isolated seeded database
+// and automatic authentication, and can never expose the bypass on the network.
+if (isDemo)
+    builder.WebHost.UseUrls("http://127.0.0.1:5098");
 
 var app = builder.Build();
 
@@ -138,6 +166,32 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseRouting();
 app.UseSession();
 app.UseAuthentication();
+if (isDemo)
+{
+    app.Use(async (context, next) =>
+    {
+        if (context.User.Identity?.IsAuthenticated != true &&
+            context.Connection.LocalIpAddress != null &&
+            System.Net.IPAddress.IsLoopback(context.Connection.LocalIpAddress))
+        {
+            var userManager = context.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+            var signInManager = context.RequestServices.GetRequiredService<SignInManager<ApplicationUser>>();
+            var demoEmail = app.Configuration["Demo:UserEmail"] ?? "admin@ghafbi.ae";
+            var demoUser = await userManager.FindByEmailAsync(demoEmail);
+            if (demoUser?.IsActive == true)
+            {
+                var principal = await signInManager.CreateUserPrincipalAsync(demoUser);
+                context.User = principal;
+                await context.SignInAsync(
+                    IdentityConstants.ApplicationScheme,
+                    principal,
+                    new AuthenticationProperties { IsPersistent = true });
+            }
+        }
+
+        await next();
+    });
+}
 app.Use(async (context, next) =>
 {
     context.Response.OnStarting(() =>
@@ -187,12 +241,23 @@ app.Use(async (context, next) =>
 {
     if (context.User.Identity?.IsAuthenticated == true)
     {
-        var userManager = context.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
-        var signInManager = context.RequestServices.GetRequiredService<SignInManager<ApplicationUser>>();
-        var user = await userManager.GetUserAsync(context.User);
-
-        if (user == null || !user.IsActive)
+        // Avoid a user-table query on every CSS, API and page request. A short cache
+        // keeps deactivation responsive while taking authentication reads out of the
+        // hot path during bursts from dashboard pages.
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var cache = context.RequestServices.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+        var cacheKey = $"auth:active:{userId}";
+        var isActive = !string.IsNullOrEmpty(userId) && await cache.GetOrCreateAsync(cacheKey, async entry =>
         {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1);
+            var userManager = context.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await userManager.FindByIdAsync(userId!);
+            return user?.IsActive == true;
+        });
+
+        if (!isActive)
+        {
+            var signInManager = context.RequestServices.GetRequiredService<SignInManager<ApplicationUser>>();
             await signInManager.SignOutAsync();
             context.Response.Redirect("/Home/Index");
             return;
@@ -261,8 +326,66 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
-// Liveness/readiness probe for hosting platforms (checks DB connectivity)
-app.MapHealthChecks("/healthz").AllowAnonymous();
+// Liveness must not scan claims or depend on a remote portal. Keepalive and
+// supervisors must not amplify database load or restart a healthy web process.
+app.MapHealthChecks("/healthz", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false
+}).AllowAnonymous();
+// Readiness is a separate dependency signal. Public output contains only check
+// names/status; authenticated operators can inspect detailed reasons in logs.
+app.MapHealthChecks("/readyz", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(entry => new
+            {
+                name = entry.Key,
+                status = entry.Value.Status.ToString(),
+                reason = entry.Value.Status == Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy
+                    ? "Ready" : entry.Key == "portal-sync" ? "Portal synchronization is stale or unavailable" : "Dependency unavailable"
+            })
+        });
+    }
+}).AllowAnonymous();
+
+// Public liveness and deployment identity endpoint. Keep this independent of
+// database and portal readiness so supervisors only restart a dead web process.
+app.MapGet("/api/health", async (HttpContext context, AiHealthProbeService aiHealth, CancellationToken cancellationToken) =>
+{
+    var assembly = Assembly.GetExecutingAssembly();
+    var informationalVersion = assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+        .InformationalVersion ?? "unknown";
+    var version = assembly.GetName().Version?.ToString() ?? "unknown";
+    var revisionFromVersion = informationalVersion.Contains('+')
+        ? informationalVersion[(informationalVersion.LastIndexOf('+') + 1)..]
+        : null;
+    var commitSha = Environment.GetEnvironmentVariable("BIX_COMMIT_SHA")
+        ?? revisionFromVersion
+        ?? "unknown";
+
+    context.Response.Headers.CacheControl = "no-store";
+    object ai;
+    try { ai = await aiHealth.GetStatusAsync(cancellationToken); }
+    catch { ai = new { state = "unavailable", fallbackReady = false }; }
+    return Results.Ok(new
+    {
+        status = "ok",
+        service = "Bix Analytika RCM",
+        version,
+        informationalVersion,
+        commitSha,
+        environment = app.Environment.EnvironmentName,
+        startedAtUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime(),
+        timestampUtc = DateTimeOffset.UtcNow,
+        ai
+    });
+}).AllowAnonymous();
 
 using (var startupScope = app.Services.CreateScope())
 {
@@ -346,6 +469,18 @@ if (app.Configuration.GetValue("StartupMaintenance:RunDatabaseSetupOnStartup", f
     var guestPwd = app.Configuration["Security:GuestPassword"];
     if (string.IsNullOrEmpty(guestPwd))
         app.Logger.LogWarning("Security:GuestPassword is not configured — guest provisioning will use a default password.");
+}
+
+if (isReportWorker)
+{
+    using var shutdown = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, eventArgs) =>
+    {
+        eventArgs.Cancel = true;
+        shutdown.Cancel();
+    };
+    await ExternalReportWorker.RunAsync(app.Services, app.Configuration, app.Logger, shutdown.Token);
+    return;
 }
 
 // Pre-warm dashboard facility status so the first user lands on hot data.
