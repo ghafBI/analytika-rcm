@@ -2,6 +2,7 @@ using Analytika.Controllers;
 using Analytika.Models;
 using Analytika.Models.ViewModels;
 using Analytika.Services;
+using Analytika.Security;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -57,13 +58,18 @@ public class HomeControllerTests : IDisposable
         _db = new AppDbContext(options);
         _db.Database.EnsureCreated();
 
+        var tenantContext = new Mock<ITenantContext>();
+        tenantContext.Setup(x => x.GetScopeAsync()).ReturnsAsync(TenantScope.Platform());
+        var facilityScope = new FacilityScopeService(_db, _userManagerMock.Object, tenantContext.Object);
+
         _sut = new HomeController(
             _signInManagerMock.Object,
             _userManagerMock.Object,
             _dashboardMock.Object,
             _db,
             _cache,
-            _loggerMock.Object);
+            _loggerMock.Object,
+            facilityScope);
     }
 
     public void Dispose()
@@ -89,9 +95,10 @@ public class HomeControllerTests : IDisposable
     }
 
     [Fact]
-    public void Index_Get_UnauthenticatedUser_ReturnsViewResult()
+    public void Index_Get_UnauthenticatedUser_ReturnsLandingView()
     {
-        // Arrange
+        // Arrange — "/" serves the marketing landing page since the routing
+        // rewire (login moved to /login → Login()).
         SetUser(authenticated: false);
 
         // Act
@@ -99,7 +106,7 @@ public class HomeControllerTests : IDisposable
 
         // Assert
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;
-        viewResult.Model.Should().BeOfType<LoginViewModel>();
+        viewResult.ViewName.Should().Be("Landing");
     }
 
     [Fact]
@@ -117,7 +124,7 @@ public class HomeControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task LogOut_Post_RedirectsToIndex()
+    public async Task LogOut_Post_RedirectsToLogin()
     {
         // Arrange
         SetUser(authenticated: true);
@@ -126,9 +133,9 @@ public class HomeControllerTests : IDisposable
         // Act
         var result = await _sut.LogOut();
 
-        // Assert
+        // Assert — logout lands on the login page (not the marketing landing).
         var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
-        redirect.ActionName.Should().Be("Index");
+        redirect.ActionName.Should().Be("Login");
         _signInManagerMock.Verify(s => s.SignOutAsync(), Times.Once);
     }
 
@@ -148,7 +155,7 @@ public class HomeControllerTests : IDisposable
             .ReturnsAsync(Microsoft.AspNetCore.Identity.SignInResult.LockedOut);
 
         // Act
-        var result = await _sut.Index(model);
+        var result = await _sut.Login(model);
 
         // Assert
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;
@@ -170,7 +177,7 @@ public class HomeControllerTests : IDisposable
             .ReturnsAsync(new ApplicationUser { Email = "inactive@test.com", IsActive = false });
 
         // Act
-        var result = await _sut.Index(model);
+        var result = await _sut.Login(model);
 
         // Assert
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;

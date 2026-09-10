@@ -12,12 +12,15 @@ namespace Analytika.Controllers;
 
 public class HomeController : Controller
 {
+    private const string DashboardSummaryCacheKey = "dashboard:summary:v1";
+    private static readonly SemaphoreSlim DashboardSummaryLock = new(1, 1);
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IDashboardService _dashboard;
     private readonly AppDbContext _db;
     private readonly IMemoryCache _cache;
     private readonly ILogger<HomeController> _logger;
+    private readonly FacilityScopeService _scope;
 
     public HomeController(
         SignInManager<ApplicationUser> signInManager,
@@ -25,7 +28,8 @@ public class HomeController : Controller
         IDashboardService dashboard,
         AppDbContext db,
         IMemoryCache cache,
-        ILogger<HomeController> logger)
+        ILogger<HomeController> logger,
+        FacilityScopeService scope)
     {
         _signInManager = signInManager;
         _userManager = userManager;
@@ -33,28 +37,44 @@ public class HomeController : Controller
         _db = db;
         _cache = cache;
         _logger = logger;
+        _scope = scope;
     }
 
+    // Public marketing landing page. Authenticated users skip straight to the dashboard.
     [HttpGet("/")]
-    [HttpGet("/Home/Index")]
     public IActionResult Index()
     {
         if (User.Identity?.IsAuthenticated == true)
             return RedirectToAction("Dashboard");
-        return View(new LoginViewModel());
+        return View("Landing");
     }
 
-    [HttpPost("/Home/Index")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Index(LoginViewModel model)
+    // Login form. Lives at /login now that / is the marketing landing.
+    // /Home/Index and /Home/Login are kept for back-compat (old bookmarks,
+    // Program.cs inactive-user redirect, LogOut redirect).
+    [HttpGet("/login")]
+    [HttpGet("/Home/Index")]
+    [HttpGet("/Home/Login")]
+    public IActionResult Login()
     {
-        if (!ModelState.IsValid) return View(model);
+        if (User.Identity?.IsAuthenticated == true)
+            return RedirectToAction("Dashboard");
+        return View("Index", new LoginViewModel());
+    }
+
+    [HttpPost("/login")]
+    [HttpPost("/Home/Index")]
+    [HttpPost("/Home/Login")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Login(LoginViewModel model)
+    {
+        if (!ModelState.IsValid) return View("Index", model);
 
         var user = await _userManager.FindByEmailAsync(model.Email);
         if (user != null && !user.IsActive)
         {
             ModelState.AddModelError(string.Empty, "This account is inactive. Please contact an administrator.");
-            return View(model);
+            return View("Index", model);
         }
 
         var result = await _signInManager.PasswordSignInAsync(
@@ -69,11 +89,11 @@ public class HomeController : Controller
         if (result.IsLockedOut)
         {
             ModelState.AddModelError(string.Empty, "Account locked due to multiple failed attempts. Try again in 15 minutes.");
-            return View(model);
+            return View("Index", model);
         }
 
         ModelState.AddModelError(string.Empty, "Invalid login attempt.");
-        return View(model);
+        return View("Index", model);
     }
 
     // ── Facility Status Dashboard ─────────────────────────────────
@@ -84,13 +104,32 @@ public class HomeController : Controller
     {
         if (User.IsInRole(AppRoles.Reporter))
             return RedirectToAction("ClaimSummaryReport", "ReportScheduler");
-        return View(await _dashboard.BuildFacilityStatusAsync());
+
+        var vm = await _dashboard.BuildFacilityStatusAsync();
+
+        // Facility isolation: everyone except Admin sees ONLY their assigned facilities.
+        // The underlying aggregate is cached globally, so narrow the view per user here
+        // and recompute the roll-ups from the visible rows.
+        var allowed = await _scope.GetAllowedFacilityIdsAsync(User);
+        if (allowed is not null)
+        {
+            vm.Facilities = vm.Facilities.Where(f => allowed.Contains(f.FacilityId)).ToList();
+            vm.TotalRecords = vm.Facilities.Sum(f => f.RecordCount);
+            vm.TotalClaimCount = vm.Facilities.Sum(f => f.ClaimCount);
+            vm.TotalFiles = vm.Facilities.Sum(f => f.DownloadedFilesCount);
+        }
+        return View(vm);
     }
 
     [Authorize(Roles = AppRoles.RcmAccess)]
     [HttpGet]
     public async Task<IActionResult> RCMDashboard(
         string tab = "Submissions",
+        List<int>? facilityIds = null,
+        List<string>? receivers = null,
+        List<string>? payers = null,
+        List<string>? encounterTypes = null,
+        // Keep old bookmarked single-select URLs working.
         int? facilityId = null,
         string? receiver = null,
         string? payer = null,
@@ -98,12 +137,35 @@ public class HomeController : Controller
         DateOnly? dateFrom = null,
         DateOnly? dateTo = null)
     {
+        facilityIds = (facilityIds ?? new()).Distinct().ToList();
+        receivers = (receivers ?? new()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        payers = (payers ?? new()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        encounterTypes = (encounterTypes ?? new()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        if (facilityId.HasValue && facilityIds.Count == 0) facilityIds.Add(facilityId.Value);
+        if (!string.IsNullOrWhiteSpace(receiver) && receivers.Count == 0) receivers.Add(receiver);
+        if (!string.IsNullOrWhiteSpace(payer) && payers.Count == 0) payers.Add(payer);
+        if (!string.IsNullOrWhiteSpace(encounterType) && encounterTypes.Count == 0) encounterTypes.Add(encounterType);
+
+        // Facility isolation: the facilityId arrives from the query string, so it must be
+        // validated — a scoped user must not be able to view another facility by editing
+        // the URL. Non-admins are forced onto one of their own facilities.
+        var allowed = await _scope.GetAllowedFacilityIdsAsync(User);
+        if (allowed is not null)
+        {
+            if (allowed.Count == 0)
+                return View("NoFacilityAccess");
+            facilityIds = facilityIds.Where(allowed.Contains).ToList();
+            if (facilityIds.Count == 0)
+                facilityIds = allowed.ToList();
+        }
+
         var filters = new RcmDashboardFilters
         {
-            FacilityId = facilityId,
-            Receiver = receiver,
-            Payer = payer,
-            EncounterType = encounterType,
+            FacilityIds = facilityIds,
+            Receivers = receivers,
+            Payers = payers,
+            EncounterTypes = encounterTypes,
             DateFrom = dateFrom,
             DateTo = dateTo
         };
@@ -117,40 +179,67 @@ public class HomeController : Controller
     [HttpGet("/api/dashboard/summary")]
     public async Task<IActionResult> DashboardSummary()
     {
-        // 5-minute cache — the 5 aggregations on a 45GB SQLite DB cost ~1s on cold path.
-        // Invalidate on portal sync via _cache.Remove("dashboard:summary:v1") if real-time freshness needed.
-        var payload = await _cache.GetOrCreateAsync("dashboard:summary:v1", async entry =>
-        {
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
-            return await ComputeDashboardSummaryAsync();
-        });
+        if (_cache.TryGetValue<object>(DashboardSummaryCacheKey, out var cached) && cached != null)
+            return Json(cached);
 
-        return Json(payload);
+        // IMemoryCache.GetOrCreateAsync does not serialize concurrent factories. The
+        // semaphore makes a cold-cache burst one database aggregation, not one per user.
+        await DashboardSummaryLock.WaitAsync(HttpContext.RequestAborted);
+        try
+        {
+            if (_cache.TryGetValue<object>(DashboardSummaryCacheKey, out cached) && cached != null)
+                return Json(cached);
+
+            var payload = await ComputeDashboardSummaryAsync(HttpContext.RequestAborted);
+            _cache.Set(DashboardSummaryCacheKey, payload, TimeSpan.FromMinutes(5));
+            return Json(payload);
+        }
+        finally
+        {
+            DashboardSummaryLock.Release();
+        }
     }
 
-    private async Task<object> ComputeDashboardSummaryAsync()
+    private async Task<object> ComputeDashboardSummaryAsync(CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
         var d30 = now.AddDays(-30);
         var d60 = now.AddDays(-60);
 
         var daily = await _db.PortalTransactions
+            .AsNoTracking()
             .Where(t => t.SyncedAt >= d30)
             .GroupBy(t => t.SyncedAt.Date)
             .Select(g => new { Date = g.Key, Count = g.Count() })
             .OrderBy(x => x.Date)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var byType = await _db.PortalTransactions
+            .AsNoTracking()
             .Where(t => t.SyncedAt >= d30)
             .GroupBy(t => t.Type)
             .Select(g => new { Type = g.Key, Count = g.Count() })
             .OrderByDescending(x => x.Count)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
-        var currentCount  = await _db.PortalTransactions.CountAsync(t => t.SyncedAt >= d30);
-        var previousCount = await _db.PortalTransactions.CountAsync(t => t.SyncedAt >= d60 && t.SyncedAt < d30);
-        var downloaded    = await _db.PortalTransactions.CountAsync(t => t.SyncedAt >= d30 && t.FileDownloaded);
+        // One index-backed pass over the 60-day window replaces three separate
+        // COUNT queries. This matters on the large PortalTransactions table and
+        // keeps the values from the same database snapshot.
+        var counts = await _db.PortalTransactions
+            .AsNoTracking()
+            .Where(t => t.SyncedAt >= d60)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                Current = g.Count(t => t.SyncedAt >= d30),
+                Previous = g.Count(t => t.SyncedAt < d30),
+                Downloaded = g.Count(t => t.SyncedAt >= d30 && t.FileDownloaded)
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var currentCount = counts?.Current ?? 0;
+        var previousCount = counts?.Previous ?? 0;
+        var downloaded = counts?.Downloaded ?? 0;
 
         double trend = previousCount > 0
             ? Math.Round((currentCount - previousCount) / (double)previousCount * 100.0, 1)
@@ -170,8 +259,104 @@ public class HomeController : Controller
     public async Task<IActionResult> LogOut()
     {
         await _signInManager.SignOutAsync();
-        return RedirectToAction("Index");
+        return RedirectToAction("Login");
     }
+
+    // ─── Self-service password reset ──────────────────────────────────────────
+    // Previously only an administrator could reset a password, so every forgotten
+    // password became a support request. Identity already issues single-use,
+    // time-limited reset tokens; this exposes that properly.
+
+    [HttpGet]
+    [AllowAnonymous]
+    public IActionResult ForgotPassword() => View(new ForgotPasswordViewModel());
+
+    [HttpPost]
+    [AllowAnonymous]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model, [FromServices] IEmailService email)
+    {
+        if (!ModelState.IsValid) return View(model);
+
+        // Always render the same confirmation, whether or not the account exists.
+        // Diverging here would turn this form into an account-enumeration oracle.
+        var user = await _userManager.FindByEmailAsync(model.Email)
+                   ?? await _userManager.FindByNameAsync(model.Email);
+
+        if (user != null && user.IsActive)
+        {
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var link = Url.Action(nameof(ResetPassword), "Home",
+                new { email = user.Email ?? user.UserName, token }, Request.Scheme);
+
+            var body = $@"
+                <p>Hello{(string.IsNullOrWhiteSpace(user.FullName) ? "" : " " + user.FullName)},</p>
+                <p>Use the link below to choose a new Bix password. It works once and expires shortly.</p>
+                <p><a href=""{link}"">Choose a new password</a></p>
+                <p>If you did not request this, no action is needed — your current password still works.</p>";
+
+            try { await email.SendEmailAsync(user.Email ?? user.UserName!, "Reset your Bix password", body); }
+            catch (Exception ex)
+            {
+                // Never surface mail-transport detail to an anonymous caller.
+                _logger.LogError(ex, "Password reset email failed for {User}", user.Id);
+            }
+        }
+        else
+        {
+            _logger.LogInformation("Password reset requested for unknown or inactive address");
+        }
+
+        return RedirectToAction(nameof(ForgotPasswordSent));
+    }
+
+    [HttpGet]
+    [AllowAnonymous]
+    public IActionResult ForgotPasswordSent() => View();
+
+    [HttpGet]
+    [AllowAnonymous]
+    public IActionResult ResetPassword(string? email, string? token)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(token))
+            return View("ResetPasswordInvalid");
+        return View(new ResetPasswordViewModel { Email = email, Token = token });
+    }
+
+    [HttpPost]
+    [AllowAnonymous]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResetPassword(ResetPasswordViewModel model)
+    {
+        if (!ModelState.IsValid) return View(model);
+
+        var user = await _userManager.FindByEmailAsync(model.Email)
+                   ?? await _userManager.FindByNameAsync(model.Email);
+        if (user == null)
+            return RedirectToAction(nameof(ResetPasswordDone));   // same outcome, no enumeration
+
+        var result = await _userManager.ResetPasswordAsync(user, model.Token, model.Password);
+        if (result.Succeeded)
+        {
+            _logger.LogInformation("Password reset completed for {User}", user.Id);
+            return RedirectToAction(nameof(ResetPasswordDone));
+        }
+
+        foreach (var e in result.Errors)
+        {
+            // Identity returns "InvalidToken" for both expired and already-used links;
+            // say that in words a person can act on.
+            ModelState.AddModelError(string.Empty,
+                e.Code == "InvalidToken"
+                    ? "This link has expired or was already used. Request a new one."
+                    : e.Description);
+        }
+        return View(model);
+    }
+
+    [HttpGet]
+    [AllowAnonymous]
+    public IActionResult ResetPasswordDone() => View();
 
     [HttpGet]
     public IActionResult Error()

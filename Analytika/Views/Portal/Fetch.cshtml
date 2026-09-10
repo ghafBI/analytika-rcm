@@ -142,6 +142,27 @@
                 </div>
             </div>
 
+            <div class="card border-0 shadow-sm mt-3" style="border-radius:12px;">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-2" style="color:#011C40;">DHA Archive Backfill</h6>
+                    <p class="small text-muted">Queue historical initial submissions for the external worker.</p>
+                    <form asp-action="ArchiveBackfill" method="post">
+                        @Html.AntiForgeryToken()
+                        <div class="row g-2 mb-2">
+                            <div class="col-6"><input name="from" type="date" class="form-control form-control-sm" required /></div>
+                            <div class="col-6"><input name="to" type="date" class="form-control form-control-sm" required /></div>
+                        </div>
+                        <select name="facilityId" class="form-select form-select-sm mb-2">
+                            <option value="">All DHA facilities</option>
+                            @foreach (var f in Model.Facilities) { <option value="@f.Value">@f.Text</option> }
+                        </select>
+                        <button class="btn btn-outline-primary btn-sm w-100" type="submit">
+                            <i class="fas fa-box-archive me-1"></i> Queue Archive Backfill
+                        </button>
+                    </form>
+                </div>
+            </div>
+
             <!-- Recent Fetch Log -->
             @if (Model.RecentLogs.Any())
             {

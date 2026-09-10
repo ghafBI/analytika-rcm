@@ -170,13 +170,22 @@ public static class ModuleRegistration
     private static IServiceCollection AddPortalModule(this IServiceCollection services)
     {
         services.AddScoped<IEmailService, EmailService>();
+        services.AddSingleton<ReportWorkbookValidator>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddSingleton<IReportValidationService, ReportValidationService>();
         services.AddScoped<IDhaPortalService, DhaPortalService>();
         services.AddScoped<IRhaPortalService, RhaPortalService>();
         services.AddScoped<PortalSyncService>();
         services.AddScoped<ReconciliationService>();
         services.AddScoped<RemittanceParserService>();
         services.AddScoped<XmlParsingService>();
+        services.AddScoped<AiHealthProbeService>();
+        services.AddScoped<IAiSettingsService, AiSettingsService>();
+        services.AddScoped<INvidiaAnalystService, NvidiaAnalystService>();
+        services.AddHttpClient("ai-health");
+        services.AddScoped<Analytika.Security.FacilityScopeService>();
+        services.AddHttpContextAccessor();
+        services.AddScoped<Analytika.Security.ITenantContext, Analytika.Security.TenantContext>();
         return services;
     }
 
@@ -219,6 +228,11 @@ public static class ModuleRegistration
 
         if (pendingDownloadHostedServiceEnabled)
             services.AddHostedService<PendingDownloadService>();
+
+        if (configuration.GetValue("LiveDataSync:Enabled", false))
+            services.AddHostedService<HourlyLiveDataService>();
+
+        services.AddHostedService<PendingReportRecoveryService>();
 
         return services;
     }
