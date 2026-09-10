@@ -2,6 +2,7 @@ using Analytika.Models;
 using Analytika.Models.ViewModels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Globalization;
 using System.Xml.Linq;
 
 namespace Analytika.Services;
@@ -686,6 +687,9 @@ public class DashboardService : IDashboardService
         var trend = Enumerable.Range(0, 6)
             .Select(i =>
             {
+                // Anchor to the latest real data month (see comment above). ServiceMonth
+                // is persisted as the full month name (XmlParsingService "MMMM"); the
+                // count query below matches "MMMM"/"MMM"/"D2" forms via its OR clause.
                 var month = latestMonth.AddMonths(i - 5);
                 var yr = month.Year.ToString();
                 var mo = month.Month.ToString("D2");

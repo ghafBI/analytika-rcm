@@ -318,6 +318,10 @@ public class XmlParsingService
         await _db.SaveChangesAsync(ct);
         if (parsed.Count > 0)
             await new ReportLookupSyncService(_db).UpsertAsync(parsed, ct);
+        // Detach saved entities so subsequent SaveChangesAsync calls in the parse
+        // loop don't re-run change detection over the whole accumulated set (O(n^2))
+        // and don't pin every parsed row in memory for the entire run.
+        _db.ChangeTracker.Clear();
     }
 
     public async Task<XmlParsingMatchResult> MatchParsedRecordsAsync(int? facilityId = null, CancellationToken ct = default)
