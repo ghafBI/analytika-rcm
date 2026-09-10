@@ -123,10 +123,7 @@ public class PortalSyncService
             // Archive search period must not exceed 1 month per call.
             var chunks = GetDateChunks(from, to, 30);
             int facNew = 0, facFiles = 0;
-<<<<<<< HEAD
-=======
             var failures = new List<string>();
->>>>>>> origin/codex/production-bix
 
             foreach (var (start, end) in chunks)
             {
@@ -145,10 +142,7 @@ public class PortalSyncService
                     {
                         _logger.LogWarning("[ArchiveBackfill] Facility {Id} {Period}: {Error}",
                             cred.FacilityId, start.ToString("yyyy-MM"), err);
-<<<<<<< HEAD
-=======
                         failures.Add($"{start:yyyy-MM}/{status}: {err}");
->>>>>>> origin/codex/production-bix
                         continue;
                     }
                     rows.AddRange(r);
@@ -158,12 +152,8 @@ public class PortalSyncService
                 if (!uniqueRows.Any()) continue;
 
                 var (n, _, files) = await UpsertDhaTransactionsWithDownloadAsync(
-<<<<<<< HEAD
-                    uniqueRows, cred.Username, pwd, cred.FacilityId, operation, start.ToString("yyyy-MM"), "DHA");
-=======
                     uniqueRows, cred.Username, pwd, cred.FacilityId, operation, start.ToString("yyyy-MM"), "DHA",
                     useArchiveDownload: true);
->>>>>>> origin/codex/production-bix
                 facNew += n; facFiles += files;
             }
 
@@ -176,26 +166,18 @@ public class PortalSyncService
                 Operation = operation,
                 FetchedBy = "system",
                 RecordsFetched = facNew,
-<<<<<<< HEAD
-                Status = "Success",
-                ResponseSummary = $"Archive backfill {from:yyyy-MM-dd}..{to:yyyy-MM-dd}: {facNew} new, {facFiles} files"
-=======
                 Status = failures.Count == 0 ? "Success" : "Failed",
                 ResponseSummary = failures.Count == 0
                     ? $"Archive backfill {from:yyyy-MM-dd}..{to:yyyy-MM-dd}: {facNew} new, {facFiles} files"
                     : $"Archive backfill incomplete: {string.Join(" | ", failures.Take(5))}"
->>>>>>> origin/codex/production-bix
             });
             await _db.SaveChangesAsync();
 
             _logger.LogInformation("[ArchiveBackfill] Facility {Id}: {New} new, {Files} files",
                 cred.FacilityId, facNew, facFiles);
-<<<<<<< HEAD
-=======
             if (failures.Count > 0)
                 throw new InvalidOperationException(
                     $"DHA archive backfill failed for facility {cred.FacilityId}: {string.Join(" | ", failures)}");
->>>>>>> origin/codex/production-bix
         }
 
         return (grandNew, grandFiles);

@@ -999,42 +999,6 @@ public class ReportService : IReportService
         ws.Range(1, 1, 6, lastColumn).Style.Border.BottomBorder = XLBorderStyleValues.Thin;
         ws.Range(1, 1, 6, lastColumn).Style.Border.BottomBorderColor = XLColor.FromHtml(ReportBorder);
 
-<<<<<<< HEAD
-        ws.Range(1, 1, 6, 1).Style.Fill.BackgroundColor = XLColor.FromHtml(GhafTeal);
-        ws.Range(1, 2, 1, lastColumn).Merge();
-        ws.Range(2, 2, 2, lastColumn).Merge();
-        ws.Range(3, 2, 3, lastColumn).Merge();
-
-        ws.Cell(1, 2).Value = "GHAF BUSINESS SERVICES";
-        ws.Cell(1, 2).Style.Font.FontColor = XLColor.FromHtml(GhafTeal);
-        ws.Cell(1, 2).Style.Font.Bold = true;
-        ws.Cell(1, 2).Style.Font.FontSize = 10;
-        ws.Cell(1, 2).Style.Alignment.Vertical = XLAlignmentVerticalValues.Bottom;
-
-        ws.Cell(2, 2).Value = title;
-        ws.Cell(2, 2).Style.Font.FontColor = XLColor.FromHtml(GhafInk);
-        ws.Cell(2, 2).Style.Font.Bold = true;
-        ws.Cell(2, 2).Style.Font.FontSize = 22;
-
-        ws.Cell(3, 2).Value = "Healthcare revenue cycle intelligence";
-        ws.Cell(3, 2).Style.Font.FontColor = XLColor.FromHtml(GhafPrimary);
-        ws.Cell(3, 2).Style.Font.FontSize = 11;
-
-        AddReportMeta(ws, 5, 7, "Facility", facility);
-        AddReportMeta(ws, 5, 11, "Date Range", period);
-        AddReportMeta(ws, 5, 16, "Rows", rowCount.ToString("N0", CultureInfo.InvariantCulture));
-        AddReportMeta(ws, 5, 20, "Generated", generatedLocal.ToString("dd MMM yyyy HH:mm"));
-        AddReportMeta(ws, 5, 26, "Report ID", report.ReportId);
-
-        if (unmatchedRemittanceCount > 0)
-            AddReportMeta(ws, 5, 33, "Ledger Notes", unmatchedRemittanceCount.ToString("N0", CultureInfo.InvariantCulture));
-
-        ws.Row(1).Height = 20;
-        ws.Row(2).Height = 28;
-        ws.Row(3).Height = 20;
-        ws.Row(4).Height = 8;
-        ws.Row(5).Height = 28;
-=======
         ws.Range(1, 1, 1, lastColumn).Merge();
         ws.Cell(1, 1).Value = "REPORT FILTERS";
         ws.Cell(1, 1).Style.Fill.BackgroundColor = XLColor.FromHtml(ReportNavy);
@@ -1057,7 +1021,6 @@ public class ReportService : IReportService
         ws.Row(3).Height = 6;
         ws.Row(4).Height = 24;
         ws.Row(5).Height = 6;
->>>>>>> origin/codex/production-bix
         ws.Row(6).Height = 8;
     }
 
@@ -1132,22 +1095,6 @@ public class ReportService : IReportService
         ws.Column(41).Width = 20;
     }
 
-<<<<<<< HEAD
-    private static string GetReportTitle(string reportType) => reportType switch
-    {
-        "ClaimSummary" => "Claim Summary Report",
-        "ClaimActivity" => "Claim Activity Report",
-        "RemittanceActivity" => "Remittance Activity Report",
-        "ClaimReceiver" => "Claim Receiver Report",
-        "ClaimClinician" => "Claim Clinician Report",
-        "FinanceTAT" => "Finance TAT Report",
-        "DenialReport" => "Denial Query Report",
-        "ClaimLifeCycle" => "Claim Life Cycle Report",
-        _ => "Ghaf Business Intelligence Report"
-    };
-
-=======
->>>>>>> origin/codex/production-bix
     private static string GetWorksheetName(string reportType)
     {
         var title = reportType switch

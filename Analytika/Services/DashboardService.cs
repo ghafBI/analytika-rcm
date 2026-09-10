@@ -608,17 +608,9 @@ public class DashboardService : IDashboardService
         var trend = Enumerable.Range(0, 6)
             .Select(i =>
             {
-<<<<<<< HEAD
-                var month = sixMonthsAgo.AddMonths(i + 1);
-                var yr = month.Year.ToString(CultureInfo.InvariantCulture);
-                // ServiceMonth is persisted as the full month name (see XmlParsingService
-                // "MMMM" formatting), so the trend join key must match that, not "01".
-                var mo = month.ToString("MMMM", CultureInfo.InvariantCulture);
-=======
                 var month = latestMonth.AddMonths(i - 5);
                 var yr = month.Year.ToString();
                 var mo = month.Month.ToString("D2");
->>>>>>> origin/codex/production-bix
                 var count = trendData
                     .Where(t => t.ServiceYear == yr &&
                         (t.ServiceMonth == mo ||

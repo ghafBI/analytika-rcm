@@ -10,13 +10,8 @@
         (function () {
             try {
                 var lang = localStorage.getItem('analytika-lang') || 'en';
-<<<<<<< HEAD
-                var theme = localStorage.getItem('analytika-theme') || 'dark';
-                var collapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-=======
                 var savedTheme = localStorage.getItem('analytika-theme');
                 var theme = savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'light';
->>>>>>> origin/codex/production-bix
                 var skin = localStorage.getItem('analytika-skin') || 'classic';
                 document.documentElement.lang = lang;
                 document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
@@ -26,30 +21,10 @@
             } catch (_) {}
         })();
     </script>
-<<<<<<< HEAD
-    <!-- Preconnect for Google Fonts (Inter) — the only remaining external asset -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Inter font — swap prevents FOIT; degrades to the system stack if unreachable -->
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" media="print" onload="this.media='all'" />
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" /></noscript>
-    <!-- Critical: Bootstrap + FontAwesome (layout-defining) — served locally so the
-         shell renders even when a CDN is blocked or the host is offline -->
-    <link rel="stylesheet" href="~/lib/bootstrap.min.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/lib/fontawesome.min.css" asp-append-version="true" />
-    <!-- Widget CSS — served locally -->
-    <link rel="stylesheet" href="~/lib/select2.min.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/lib/flatpickr.min.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/lib/datatables/dataTables.bootstrap5.min.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/lib/datatables/buttons.bootstrap5.min.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/lib/datatables/responsive.bootstrap5.min.css" asp-append-version="true" />
-=======
     <link rel="stylesheet" href="~/lib/bootstrap.min.css" />
     <link rel="stylesheet" href="~/lib/fontawesome.min.css" />
     <link rel="stylesheet" href="~/lib/select2.min.css" />
     <link rel="stylesheet" href="~/lib/flatpickr.min.css" />
->>>>>>> origin/codex/production-bix
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/themes.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/loaders.css" asp-append-version="true" />
@@ -292,86 +267,10 @@
     }
 </div>
 
-<<<<<<< HEAD
-<!-- ═══════════════════════════════════════════════ Confirm modal ════════════ -->
-<div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content">
-            <div class="modal-body p-4 text-center">
-                <div class="mb-3">
-                    <i class="fas fa-exclamation-triangle fa-2x text-warning" aria-hidden="true"></i>
-                </div>
-                <h6 class="fw-semibold mb-2" id="confirmModalLabel">Confirm Action</h6>
-                <p class="text-muted mb-4" id="confirmModalMessage" style="font-size:var(--fs-sm);"></p>
-                <div class="d-flex gap-2 justify-content-center">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" id="confirmModalConfirm">Confirm</button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════ Support chat panel ═══════ -->
-<div id="supportChatPanel" class="support-panel" aria-hidden="true" role="dialog" aria-label="Support Chat">
-    <div class="support-panel-header">
-        <div class="d-flex align-items-center gap-2">
-            <div class="support-avatar"><i class="fas fa-robot" aria-hidden="true"></i></div>
-            <div>
-                <div class="support-title">Bix Support</div>
-                <div class="support-subtitle">Powered by Claude AI</div>
-            </div>
-        </div>
-        <button class="support-close-btn" id="supportCloseBtn" aria-label="Close support chat">
-            <i class="fas fa-times" aria-hidden="true"></i>
-        </button>
-    </div>
-    <div class="support-messages" id="supportMessages">
-        <div class="support-msg support-msg-assistant">
-            <div class="support-bubble">
-                Hi! I'm your Bix support assistant. Describe a bug, ask a question, or request a feature — I'll help you right away.
-            </div>
-        </div>
-    </div>
-    <div class="support-panel-footer">
-        <form id="supportChatForm" autocomplete="off">
-            @Html.AntiForgeryToken()
-            <div class="support-input-row">
-                <textarea id="supportInput" class="support-input" rows="1"
-                          placeholder="Describe your issue…" aria-label="Support message"
-                          maxlength="2000"></textarea>
-                <button type="submit" class="support-send-btn" id="supportSendBtn" aria-label="Send">
-                    <i class="fas fa-paper-plane" aria-hidden="true"></i>
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-<div class="support-backdrop" id="supportBackdrop"></div>
-
-<!-- ═══════════════════════════════════════════════ Scripts ═══════════════════ -->
-<!-- All shell libraries are served locally so the app works offline / behind a
-     blocked CDN. Bootstrap must be synchronous — it initialises on DOMContentLoaded -->
-<script src="~/lib/bootstrap.bundle.min.js" asp-append-version="true"></script>
-<!-- jQuery and plugins must be synchronous: MVC @@section Scripts runs inline and depends on $ being defined -->
-<script src="~/lib/jquery.min.js" asp-append-version="true"></script>
-<script src="~/lib/select2.min.js" asp-append-version="true"></script>
-<script src="~/lib/flatpickr.min.js" asp-append-version="true"></script>
-<script src="~/lib/datatables/dataTables.min.js" asp-append-version="true"></script>
-<script src="~/lib/datatables/dataTables.bootstrap5.min.js" asp-append-version="true"></script>
-<script src="~/lib/datatables/dataTables.buttons.min.js" asp-append-version="true"></script>
-<script src="~/lib/datatables/buttons.bootstrap5.min.js" asp-append-version="true"></script>
-<script src="~/lib/datatables/buttons.html5.min.js" asp-append-version="true"></script>
-<script src="~/lib/datatables/buttons.colVis.min.js" asp-append-version="true"></script>
-<script src="~/lib/datatables/dataTables.responsive.min.js" asp-append-version="true"></script>
-<script src="~/lib/datatables/responsive.bootstrap5.min.js" asp-append-version="true"></script>
-<script src="~/lib/apexcharts.min.js" asp-append-version="true" defer></script>
-=======
 <script src="~/lib/jquery.min.js"></script>
 <script src="~/lib/bootstrap.bundle.min.js"></script>
 <script src="~/lib/select2.min.js"></script>
 <script src="~/lib/flatpickr.min.js"></script>
->>>>>>> origin/codex/production-bix
 <script src="~/js/site.js" asp-append-version="true"></script>
 @await RenderSectionAsync("Scripts", required: false)
 <script>
