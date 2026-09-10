@@ -80,6 +80,10 @@ public class ReportLookupRepairCommandTests
             Assert.Equal(3, checkpoint.LastId);
             Assert.Equal(3, checkpoint.RowsRead);
             Assert.Equal(5, checkpoint.Inserted);
+            Assert.False(string.IsNullOrWhiteSpace(checkpoint.FileIdentity));
+
+            // Metadata changes must not invalidate the Linux device/inode identity.
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
 
             Assert.Equal(0, await ReportLookupRepairCommand.RunAsync(path, CancellationToken.None));
             await using var verified = new AppDbContext(options);
@@ -89,6 +93,14 @@ public class ReportLookupRepairCommandTests
             Assert.Equal(3, await verified.XmlParsedRecords.CountAsync());
             var replayed = JsonSerializer.Deserialize<ReportLookupRepairCommand.LookupRepairCheckpoint>(await File.ReadAllTextAsync(checkpointPath));
             Assert.Equal(checkpoint, replayed);
+            await verified.DisposeAsync();
+            // A different database at the same pathname must still fail closed.
+            var replacement = Path.Combine(directory, "replacement.db");
+            File.Copy(path, replacement);
+            if (OperatingSystem.IsWindows())
+                File.SetCreationTimeUtc(replacement, DateTime.UtcNow.AddDays(-1));
+            File.Move(replacement, path, overwrite: true);
+            Assert.Equal(2, await ReportLookupRepairCommand.RunAsync(path, CancellationToken.None));
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

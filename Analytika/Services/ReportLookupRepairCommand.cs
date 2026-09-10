@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 using Analytika.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -30,17 +31,20 @@ public static class ReportLookupRepairCommand
             await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection.ToString()).Options);
             db.Database.SetCommandTimeout(5);
             var identity = new FileInfo(path).CreationTimeUtc.Ticks;
+            var fileIdentity = await ReadFileIdentityAsync(path, identity, ct);
             var checkpoint = File.Exists(checkpointPath)
                 ? JsonSerializer.Deserialize<LookupRepairCheckpoint>(await File.ReadAllTextAsync(checkpointPath, ct))
                 : null;
             if (checkpoint != null && (!string.Equals(checkpoint.DatabasePath, path, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
-                || checkpoint.CreationTicks != identity))
+                || (checkpoint.FileIdentity is not null
+                    ? checkpoint.FileIdentity != fileIdentity
+                    : !OperatingSystem.IsWindows() || checkpoint.CreationTicks != identity)))
                 throw new InvalidOperationException("Database identity differs from checkpoint.");
             if (checkpoint == null)
             {
                 var highWatermark = await db.XmlParsedRecords.AsNoTracking().OrderByDescending(row => row.Id)
                     .Select(row => (int?)row.Id).FirstOrDefaultAsync(ct) ?? 0;
-                checkpoint = new(path, identity, highWatermark, 0, 0, 0);
+                checkpoint = new(path, identity, highWatermark, 0, 0, 0, fileIdentity);
                 await SaveAsync(checkpointPath, checkpoint, ct);
             }
             var sync = new ReportLookupSyncService(db);
@@ -108,5 +112,40 @@ public static class ReportLookupRepairCommand
         }
     }
 
-    public record LookupRepairCheckpoint(string DatabasePath, long CreationTicks, int HighWatermark, int LastId, long RowsRead, long Inserted);
+    private static async Task<string> ReadFileIdentityAsync(string path, long creationTicks, CancellationToken ct)
+    {
+        if (OperatingSystem.IsWindows()) return $"windows-creation:{creationTicks}";
+        // Unix CreationTime may fall back to mutable ctime/mtime. Device/inode
+        // remain stable across SQLite writes but change on file replacement.
+        if (!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Lookup repair identity requires Windows or Linux.");
+        var executable = File.Exists("/usr/bin/stat") ? "/usr/bin/stat" : "/bin/stat";
+        var start = new ProcessStartInfo(executable)
+        {
+            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        start.ArgumentList.Add("-L");
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add("%d:%i");
+        start.ArgumentList.Add("--");
+        start.ArgumentList.Add(path);
+        using var process = Process.Start(start) ?? throw new IOException("Cannot inspect database identity.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        try
+        {
+            var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            var error = process.StandardError.ReadToEndAsync(timeout.Token);
+            await process.WaitForExitAsync(timeout.Token);
+            var value = (await output).Trim();
+            await error;
+            var parts = value.Split(':');
+            if (process.ExitCode != 0 || parts.Length != 2 || parts.Any(part => !ulong.TryParse(part, out _)))
+                throw new IOException("Database file identity unavailable.");
+            return "linux-inode:" + value;
+        }
+        finally { if (!process.HasExited) process.Kill(); }
+    }
+
+    public record LookupRepairCheckpoint(string DatabasePath, long CreationTicks, int HighWatermark, int LastId, long RowsRead, long Inserted, string? FileIdentity = null);
 }
